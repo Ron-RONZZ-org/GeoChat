@@ -4,7 +4,7 @@
   "version": "0.5.7",
   "identifier": "ai.geochat.desktop",
   "build": {
-    "beforeDevCommand": "bun run tauri:renderer:dev",
+    "beforeDevCommand": "bun run tauri:prepare && bun run tauri:renderer:dev",
     "devUrl": "http://127.0.0.1:1421",
     "beforeBuildCommand": "bun run tauri:prepare",
     "frontendDist": "../dist/renderer"

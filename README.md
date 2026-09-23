@@ -109,9 +109,10 @@ bun install
 bun run dev
 ```
 
-`bun run dev` 会启动 Tauri 桌面应用。开发模式下，除非
-`GEOCHAT_DESKTOP_BACKEND_URL` 指向已有后端，否则桌面外壳会自动启动本地
-Bun 后端。
+`bun run dev` 会先运行 `bun run tauri:prepare`，生成 `dist/` 下的后端、渲染层、
+vendor 与 runtime 资源（Tauri 编译时把这些目录当作必需资源），再启动 Tauri
+桌面应用。开发模式下，除非 `GEOCHAT_DESKTOP_BACKEND_URL` 指向已有后端，否则
+桌面外壳会自动启动本地 Bun 后端。
 
 默认 SQLite 数据库路径：
 
