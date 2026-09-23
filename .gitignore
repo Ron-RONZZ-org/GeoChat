@@ -26,6 +26,9 @@ docs/local/
 !.env.example
 
 .artifacts/
+playwright-report/
+test-results/
+blob-report/
 
 # Local-only public/commercial boundary audit.
 tests/public-ui-boundary.test.ts

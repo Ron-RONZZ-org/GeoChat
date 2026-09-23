@@ -140,6 +140,8 @@ bun run dev                 # 启动 Tauri 桌面开发应用。
 bun run backend:dev         # 只启动本地后端。
 bun run typecheck           # 检查共享、Node 和渲染层 TypeScript。
 bun test tests              # 运行 Bun 测试套件。
+bun run test:e2e            # 运行 Playwright 端到端测试（自动启动后端与渲染层）。
+bun run test:e2e:install    # 首次运行 E2E 前安装 Playwright Chromium。
 bun run tauri:check         # 对 Tauri 外壳运行 cargo check。
 bun run tauri:prepare       # 构建后端、渲染层、vendor、runtime 和 manifest。
 bun run build               # 类型检查并准备 app bundle。
@@ -189,6 +191,20 @@ bun run package:backend-smoke
 - GeoGebra 集成说明见 `docs/geogebra-applet.md`。
 - AI SDK 原生 Agent 架构见 `docs/ai-sdk-native-migration.md`。
 - Tauri 外壳说明见 `docs/tauri2-shell-migration-plan.md`。
+
+## 端到端测试
+
+`e2e/` 下的 Playwright 测试直接运行 Web 渲染层，并连接本地 Bun 后端（由
+`playwright.config.ts` 自动启动），无需启动原生 Tauri 外壳即可在 Chromium 中
+验证 GeoGebra 画板挂载与画板界面切换。测试固定使用 17366 端口，避免与本地
+已安装的 GeoChat.app（占用 17365）冲突。
+
+```sh
+bun run test:e2e:install   # 首次运行前安装 Chromium。
+bun run test:e2e
+```
+
+CI 流程在 `.github/workflows/e2e.yml`，于默认分支 push 时运行。
 
 ## 发布前验证
 
