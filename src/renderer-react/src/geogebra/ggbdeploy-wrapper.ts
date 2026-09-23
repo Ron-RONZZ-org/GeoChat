@@ -1,3 +1,5 @@
+import { applyCanvasChrome, DEFAULT_CANVAS_CHROME, type CanvasChromeMode } from "./canvas-chrome";
+
 export type GeoGebraApi = Record<string, unknown>;
 export type GeoGebraApplet = GeoGebraApi & {
   inject: (...args: unknown[]) => unknown;
@@ -97,6 +99,8 @@ export async function mountGeoGebra(options: {
   backendBaseUrl: string;
   /** Cancels an in-flight mount (notably React StrictMode effect replay). */
   signal?: AbortSignal;
+  /** Which GeoGebra chrome to start with. Defaults to the full interface. */
+  chrome?: CanvasChromeMode;
   onReady: (api: GeoGebraApi) => void;
 }) {
   const mountToken = Symbol("geogebra-mount");
@@ -240,6 +244,7 @@ export async function mountGeoGebra(options: {
       syncSize();
     });
   };
+  const chrome = options.chrome ?? DEFAULT_CANVAS_CHROME;
   const applet = new window.GGBApplet(5.0, {
     id,
     width: initialSize().width,
@@ -249,9 +254,11 @@ export async function mountGeoGebra(options: {
     // input field collapsed by default. Users can reopen it from the applet
     // controls when needed.
     perspective: "G",
-    showToolBar: false,
+    showToolBar: chrome === "full",
     showToolBarHelp: false,
-    showMenuBar: false,
+    showMenuBar: chrome === "full",
+    // The bottom algebra input bar is left off: it sits under the shell's own
+    // canvas controls. The Algebra view offers the same input from the menu.
     showAlgebraInput: false,
     algebraInputPosition: "algebra",
     // Use the shell-owned reset control so it stays reachable above the
@@ -265,9 +272,11 @@ export async function mountGeoGebra(options: {
     appletOnLoad: (api: GeoGebraApi) => {
       if (disposed || !isActiveMount() || options.signal?.aborted) return;
       runtimeApi = api;
-      const showToolBar = api.showToolBar;
+      // Initial parameters already set the chrome; re-apply through the runtime
+      // API so a preference captured before mount reaches the live applet and a
+      // later switch follows the same path.
+      applyCanvasChrome(api, chrome);
       const setPerspective = api.setPerspective;
-      try { if (typeof showToolBar === "function") showToolBar.call(api, false); } catch (caughtError) { console.error("[ERROR] Caught exception at src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts:279", caughtError); /* initial parameters already hide it */ }
       try {
         // This standalone frontend uses the patched applet API directly. The
         // extension-only switchThroughSubApp bridge must not be used here.

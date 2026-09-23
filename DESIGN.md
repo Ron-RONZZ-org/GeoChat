@@ -24,6 +24,7 @@
 
 ## Information architecture
 - Primary hierarchy: GeoGebra canvas first, floating assistant second, transient drawers and configuration third.
+- Canvas chrome: a preference switches between GeoGebra's own toolbar and menu bar and the sparse drawing surface. The canvas control and the General settings tab both edit it, and switching never remounts the applet or resets the construction.
 - Assistant views: `chat` and `settings`. Conversation, composer draft, attachments, canvas, panel position, and panel size remain intact when changing views.
 - Chat header actions: history/title, new conversation, blackboard, problem bank, language, settings, minimize. The problem-bank entry is a visible icon button with a tooltip, not hidden inside settings.
 - Problem-bank browser: an animated companion card opens immediately to the right of the chat panel, stays equal to the panel height, scrolls independently, and can be retracted from either the header trigger or its close button. On constrained widths it becomes a right-edge overlay rather than forcing the whole workspace off-screen.

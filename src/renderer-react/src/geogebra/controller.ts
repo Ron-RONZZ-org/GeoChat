@@ -1,5 +1,6 @@
 import type { GeoGebraApi } from "./ggbdeploy-wrapper";
 import { canvasLabels, getAppletXml, readCanvasContext, tryReadCanvasContext, type CanvasContext } from "./canvas-context";
+import { applyCanvasChrome, type CanvasChromeMode } from "./canvas-chrome";
 import { normalizeGeoGebraCommandSyntax, normalizeGeoGebraFreeParameterCommands } from "@geochat-ai/app/functioncalls";
 import { evaluateCommand, type CommandResult } from "./command-executor";
 
@@ -64,6 +65,13 @@ export class GeoGebraController {
     if (!this.api || typeof this.api.setXML !== "function") return false;
     this.call("setXML", xml);
     return true;
+  }
+
+  /** Show or hide GeoGebra's own chrome on the live applet, without a remount. */
+  setCanvasChrome(mode: CanvasChromeMode) {
+    if (!this.api) return;
+    applyCanvasChrome(this.api, mode);
+    this.refreshVisuals();
   }
 
   private async executeCommands(input: Record<string, unknown>) {

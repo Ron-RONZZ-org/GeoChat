@@ -36,9 +36,16 @@ Current local route:
 /tools/geogebra-assets-v2 -> vendor/geogebra
 ```
 
-The SolidJS wrapper in `src/renderer/src/geogebra.ts` owns the runtime contract:
+The React wrapper in `src/renderer-react/src/geogebra/ggbdeploy-wrapper.ts` owns the runtime contract:
 
 - inject the applet using `new window.GGBApplet(...)`
 - set the HTML5 codebase to `HTML5/5.0/web3d/`
 - maintain per-board controller state instead of relying on a single global `window.ggbApplet`
-- expose command execution, canvas context, PNG export, and GGB export as desktop app services
+- expose command execution, canvas context, and PNG export as desktop app services
+
+The canvas can present GeoGebra's own toolbar and menu bar or the sparse drawing
+surface. `src/renderer-react/src/geogebra/canvas-chrome.ts` owns the preference
+(default: full interface) and applies it through GeoGebra's runtime
+`showToolBar` / `showMenuBar` toggles, so switching never remounts the applet or
+resets the construction. Both the General settings tab and a canvas control edit
+it.

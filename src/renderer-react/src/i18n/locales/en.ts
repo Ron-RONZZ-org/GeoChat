@@ -20,6 +20,10 @@ export const en = {
       error: "Canvas connection failed",
     },
   },
+  canvasChrome: {
+    enableFull: "Show GeoGebra's full interface",
+    enableSimple: "Switch to the simple canvas",
+  },
   panel: {
     thinking: "Thinking",
     thinkingComplete: "Thinking complete",
@@ -440,6 +444,10 @@ export const en = {
     tourTitle: "Quick tour",
     tourDescription: "Review the main controls",
     restartTour: "Show tutorial again",
+    canvasChromeTitle: "GeoGebra interface",
+    canvasChromeDescription: "Show GeoGebra's own toolbar and menu bar",
+    canvasChromeFull: "Full interface",
+    canvasChromeSimple: "Simple canvas",
     updateTitle: "Updates",
     updateCurrentVersion: "Current version",
     updateLatest: "You are on the latest version: {{version}}",

@@ -20,6 +20,10 @@ export const zhCN = {
       error: "画板连接失败",
     },
   },
+  canvasChrome: {
+    enableFull: "显示 GeoGebra 完整界面",
+    enableSimple: "切换到精简画板",
+  },
   panel: {
     thinking: "思考中",
     thinkingComplete: "思考完成",
@@ -440,6 +444,10 @@ export const zhCN = {
     tourTitle: "\u4f7f\u7528\u6559\u7a0b",
     tourDescription: "\u67e5\u770b\u4e3b\u8981\u529f\u80fd\u4ecb\u7ecd",
     restartTour: "\u91cd\u65b0\u67e5\u770b\u6559\u7a0b",
+    canvasChromeTitle: "GeoGebra 界面",
+    canvasChromeDescription: "显示 GeoGebra 自带的工具栏和菜单栏",
+    canvasChromeFull: "完整界面",
+    canvasChromeSimple: "精简画板",
     updateTitle: "\u66f4\u65b0",
     updateCurrentVersion: "\u5f53\u524d\u7248\u672c",
     updateLatest: "\u5f53\u524d\u5df2\u662f\u6700\u65b0\u7248\u672c\uff1a{{version}}",

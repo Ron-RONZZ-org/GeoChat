@@ -5,6 +5,7 @@ import type { DesktopLogLevel } from "../../../../../shared/desktop-api";
 import { UpdateSection } from "../UpdateSection";
 import type { McpController } from "../useMcpState";
 import { useLoggingState } from "../useLoggingState";
+import { useCanvasChrome } from "../../../hooks/useCanvasChrome";
 import { ProblemBankCacheSettings } from "./ProblemBankCacheSettings";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { SettingsSection } from "./SettingsSection";
@@ -19,11 +20,38 @@ export function GeneralSettings({ mcp, onRestartTour }: { mcp: McpController; on
   return (
     <Box className="settings-page settings-general-page">
       <TourSection onRestartTour={onRestartTour} />
+      <CanvasChromeSection />
       <UpdateSection />
       <LoggingSection />
       <ProblemBankCacheSettings />
       <McpSection mcp={mcp} />
     </Box>
+  );
+}
+
+function CanvasChromeSection() {
+  const { t } = useTranslation();
+  const { mode, setMode } = useCanvasChrome();
+  const full = mode === "full";
+  return (
+    <SettingsSection title={t("settings.canvasChromeTitle")} description={t("settings.canvasChromeDescription")}>
+      <FormControlLabel
+        className="settings-toggle-row"
+        labelPlacement="start"
+        control={
+          <Switch
+            size="small"
+            checked={full}
+            onChange={(event) => setMode(event.target.checked ? "full" : "canvas")}
+          />
+        }
+        label={
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {full ? t("settings.canvasChromeFull") : t("settings.canvasChromeSimple")}
+          </Typography>
+        }
+      />
+    </SettingsSection>
   );
 }
 

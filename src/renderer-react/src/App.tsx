@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import RestartAltRounded from "@mui/icons-material/RestartAltRounded";
+import TuneRounded from "@mui/icons-material/TuneRounded";
 import { CircularProgress } from "@mui/material";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { AssistantPanel } from "./components/AssistantPanel";
+import { getCanvasChromeMode } from "./geogebra/canvas-chrome";
 import { GeoGebraController } from "./geogebra/controller";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
+import { useCanvasChrome } from "./hooks/useCanvasChrome";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
@@ -15,6 +18,7 @@ export default function App() {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
+  const { mode: canvasChrome, toggle: toggleCanvasChrome } = useCanvasChrome();
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -36,6 +40,7 @@ export default function App() {
       container,
       backendBaseUrl: backendOrigin(),
       signal: mountAbort.signal,
+      chrome: getCanvasChromeMode(),
       onReady: (api) => {
         if (disposed) return;
         controllerRef.current.setApi(api);
@@ -58,6 +63,13 @@ export default function App() {
       setFrontendGeoGebraController(null);
     };
   }, []);
+
+  // Apply the saved presentation once the applet is live, and on every change.
+  // Switching never remounts the applet, so an in-progress construction stays.
+  useEffect(() => {
+    if (canvasState !== "ready") return;
+    controllerRef.current.setCanvasChrome(canvasChrome);
+  }, [canvasChrome, canvasState]);
 
   async function resetCanvas() {
     if (canvasState !== "ready" || resetting) return;
@@ -107,16 +119,29 @@ export default function App() {
             {t(`canvasStatus.canvas.${canvasState}`)}
           </span>
         </div>
-        <button
-          type="button"
-          className="frontend-canvas-reset"
-          onClick={() => void resetCanvas()}
-          disabled={canvasState !== "ready" || resetting}
-          aria-label="重置 GeoGebra 画板"
-          title="重置画板"
-        >
-          {resetting ? <CircularProgress size={18} color="inherit" /> : <RestartAltRounded fontSize="small" />}
-        </button>
+        <div className="frontend-canvas-controls">
+          <button
+            type="button"
+            className="frontend-canvas-reset"
+            onClick={() => void resetCanvas()}
+            disabled={canvasState !== "ready" || resetting}
+            aria-label="重置 GeoGebra 画板"
+            title="重置画板"
+          >
+            {resetting ? <CircularProgress size={18} color="inherit" /> : <RestartAltRounded fontSize="small" />}
+          </button>
+          <button
+            type="button"
+            className="frontend-canvas-reset frontend-canvas-chrome-toggle"
+            onClick={toggleCanvasChrome}
+            disabled={canvasState !== "ready"}
+            aria-pressed={canvasChrome === "full"}
+            aria-label={canvasChrome === "full" ? t("canvasChrome.enableSimple") : t("canvasChrome.enableFull")}
+            title={canvasChrome === "full" ? t("canvasChrome.enableSimple") : t("canvasChrome.enableFull")}
+          >
+            <TuneRounded fontSize="small" />
+          </button>
+        </div>
         {canvasState !== "ready" && (
           <div className="frontend-canvas-overlay" role={canvasState === "error" ? "alert" : "status"}>
             <div className={canvasState === "error" ? "frontend-canvas-error" : "frontend-loader"} />

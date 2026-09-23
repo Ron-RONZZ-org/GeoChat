@@ -187,6 +187,17 @@ h2 { font-size: 18px; }
 .frontend-canvas-reset:hover:not(:disabled) { color: #078d48; background: #effaf3; transform: translateY(-1px); }
 .frontend-canvas-reset:focus-visible { outline: 2px solid #07c160; outline-offset: 2px; }
 .frontend-canvas-reset:disabled { cursor: not-allowed; opacity: .5; }
+/* Canvas controls live bottom-left: the floating assistant panel covers the
+   bottom-right corner at the default window size, where they used to sit. */
+.frontend-canvas-controls {
+  position: absolute;
+  left: 20px;
+  bottom: 66px;
+  z-index: 6;
+  display: flex;
+  gap: 10px;
+}
+.frontend-canvas-controls .frontend-canvas-reset { position: static; }
 .frontend-canvas-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #607168; background: #fff; font-size: 13px; }
 .frontend-canvas-overlay span { max-width: min(560px, calc(100vw - 40px)); color: #a64d44; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
 .frontend-loader { width: 24px; height: 24px; border: 2px solid #d6eadd; border-top-color: #07c160; border-radius: 50%; animation: frontend-spin .8s linear infinite; }

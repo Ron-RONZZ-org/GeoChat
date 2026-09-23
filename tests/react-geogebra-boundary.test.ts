@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateCommand, normalizeCommandResult } from "../src/renderer-react/src/geogebra/command-executor";
 import { GeoGebraController } from "../src/renderer-react/src/geogebra/controller";
+import { applyCanvasChrome, DEFAULT_CANVAS_CHROME, getCanvasChromeMode, setCanvasChromeMode } from "../src/renderer-react/src/geogebra/canvas-chrome";
 import type { GeoGebraApi } from "../src/renderer-react/src/geogebra/ggbdeploy-wrapper";
 
 /**
@@ -170,5 +171,50 @@ describe("controller tool boundary", () => {
     const controller = new GeoGebraController();
     controller.setApi(api({ evalCommand: () => true }));
     await expect(controller.executeTool("notATool", {})).rejects.toThrow();
+  });
+});
+
+describe("canvas chrome", () => {
+  test("defaults to the full GeoGebra interface", () => {
+    expect(DEFAULT_CANVAS_CHROME).toBe("full");
+  });
+
+  test("applies each mode through the runtime toggles, not a remount", () => {
+    const calls: Array<[string, unknown]> = [];
+    const target = api({
+      showToolBar: (value: unknown) => { calls.push(["showToolBar", value]); },
+      showMenuBar: (value: unknown) => { calls.push(["showMenuBar", value]); }
+    });
+    applyCanvasChrome(target, "canvas");
+    applyCanvasChrome(target, "full");
+    expect(calls).toEqual([
+      ["showToolBar", false],
+      ["showMenuBar", false],
+      ["showToolBar", true],
+      ["showMenuBar", true]
+    ]);
+  });
+
+  test("the controller forwards the mode to the live applet", () => {
+    const calls: Array<[string, unknown]> = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({
+      showToolBar: (value: unknown) => { calls.push(["showToolBar", value]); },
+      showMenuBar: (value: unknown) => { calls.push(["showMenuBar", value]); }
+    }));
+    controller.setCanvasChrome("full");
+    expect(calls).toEqual([["showToolBar", true], ["showMenuBar", true]]);
+  });
+
+  test("is inert before the applet is mounted", () => {
+    const controller = new GeoGebraController();
+    expect(() => controller.setCanvasChrome("full")).not.toThrow();
+  });
+
+  test("remembers the chosen mode", () => {
+    const previous = getCanvasChromeMode();
+    setCanvasChromeMode("canvas");
+    expect(getCanvasChromeMode()).toBe("canvas");
+    setCanvasChromeMode(previous);
   });
 });
