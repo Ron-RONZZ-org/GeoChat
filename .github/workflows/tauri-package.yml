@@ -5,17 +5,29 @@ on:
     branches: [master]
     tags: ['v*']
     # The marketing site has its own workflow; changing copy must not spend
-    # half an hour of macOS and Windows runner time. Only website/** is
-    # ignored — a release commit always touches version files outside it, so
-    # this cannot cause a tag to skip its build.
+    # half an hour of macOS and Windows runner time. Docs-only changes are
+    # ignored for the same reason (a release commit always touches version
+    # files outside these paths, so a tag cannot skip its build). Deliberately
+    # not '**/*.md': backend/src/agent/builtin-skills/**/SKILL.md are runtime
+    # assets.
     paths-ignore:
       - 'website/**'
       - '.github/workflows/website.yml'
+      - '*.md'
+      - '**/README.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
   pull_request:
     branches: [master]
     paths-ignore:
       - 'website/**'
       - '.github/workflows/website.yml'
+      - '*.md'
+      - '**/README.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
   workflow_dispatch:
 
 concurrency:

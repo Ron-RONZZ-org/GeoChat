@@ -5,7 +5,23 @@ on:
     branches:
       - master
       - main
+    # Docs-only changes need no E2E run. Deliberately NOT `**/*.md`: the
+    # `backend/src/agent/builtin-skills/**/SKILL.md` files are runtime assets,
+    # so only root markdown, READMEs, docs/ and the licence/notice are
+    # ignored.
+    paths-ignore:
+      - '*.md'
+      - '**/README.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
   pull_request:
+    paths-ignore:
+      - '*.md'
+      - '**/README.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'NOTICE'
   workflow_dispatch:
 
 concurrency:
