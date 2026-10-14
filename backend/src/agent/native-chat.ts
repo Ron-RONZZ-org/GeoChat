@@ -41,7 +41,6 @@ import { createBackendLanguageModel } from "./ai-sdk-models";
 import { createBackendPlanningTools } from "./ai-sdk-tools";
 import { selectAgentSkillsForRun } from "./skill-selector";
 import { systemPromptForRun } from "./agent-prompt";
-import { refineExecuteGeoGebraCommands } from "./native-tool-policy";
 import { AgentRunLedgerConflictError } from "../db/agent-run-repository";
 
 export type NativeChatRequest = {
@@ -256,12 +255,6 @@ export async function createNativeChatResponse(
             input: JSON.stringify(repaired.input),
           }
         : null;
-    },
-    experimental_refineToolInput: {
-      executeGeoGebraCommands: (args) => refineExecuteGeoGebraCommands(args, {
-        prompt: run.prompt,
-        locale: run.locale,
-      }),
     },
     onEnd: async ({ usage, finishReason }) => {
       finalUsage = usage;
@@ -670,23 +663,27 @@ function mergeCompletedUITools(run: AgentRunLedgerRecord, messages: UIMessage[])
       if (!isFunctionCallToolName(toolName)) continue;
       if (part.state !== "output-available" && part.state !== "output-error" && part.state !== "output-denied") continue;
       const previous = existingById.get(part.toolCallId);
-      const args = completedUIToolArgs(part, toolName, previous?.args);
-      if (args === null) {
-        console.error(`[ERROR] Ignoring invalid ${toolName} UI tool input while preserving runId=${run.runId}`);
-        continue;
+      const resolved = completedUIToolArgs(part, toolName, previous?.args);
+      if (!resolved.valid) {
+        // Never silently drop a completed UI tool. Record it as a failed tool so
+        // the ledger reflects what happened and the run can terminate, and log
+        // the offending input (otherwise invisible) for diagnosis.
+        console.error(`[ERROR] Completed ${toolName} UI tool has invalid input; recording as failed runId=${run.runId} input=${safePreview(resolved.args)}`);
       }
       const now = new Date().toISOString();
       const tool: AgentRunToolRecord = {
         toolCallId: part.toolCallId,
         toolName: toolName as FunctionCallToolName,
-        status: part.state === "output-available" ? "succeeded" : "failed",
-        args,
+        status: resolved.valid && part.state === "output-available" ? "succeeded" : "failed",
+        args: resolved.args,
         result: part.state === "output-available" && "output" in part ? part.output : previous?.result,
-        error: part.state === "output-error" && "errorText" in part && typeof part.errorText === "string"
-          ? part.errorText
-          : part.state === "output-denied"
-            ? "Tool output was denied."
-            : null,
+        error: !resolved.valid
+          ? `Invalid tool input for ${toolName}.`
+          : part.state === "output-error" && "errorText" in part && typeof part.errorText === "string"
+            ? part.errorText
+            : part.state === "output-denied"
+              ? "Tool output was denied."
+              : null,
         startedAt: previous?.startedAt ?? now,
         completedAt: previous?.completedAt ?? now,
         durationMs: previous?.durationMs ?? 0,
@@ -710,10 +707,23 @@ function completedUIToolArgs(
   part: UIMessage["parts"][number],
   toolName: FunctionCallToolName,
   previousArgs: unknown,
-) {
+): { args: unknown; valid: boolean } {
   const payload = part as unknown as Record<string, unknown>;
   const candidates = [payload.input, parseRawToolInput(payload.rawInput), previousArgs];
-  return candidates.find((candidate) => isFunctionCallArgs(toolName, candidate)) ?? null;
+  for (const candidate of candidates) {
+    if (isFunctionCallArgs(toolName, candidate)) return { args: candidate, valid: true };
+  }
+  return { args: candidates.find((candidate) => candidate !== undefined) ?? null, valid: false };
+}
+
+function safePreview(value: unknown, maxLength = 512) {
+  let text: string;
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  } catch {
+    text = String(value);
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
 }
 
 function parseRawToolInput(value: unknown) {

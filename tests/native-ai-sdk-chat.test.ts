@@ -401,7 +401,7 @@ describe("native AI SDK UI tool loop", () => {
     const user: UIMessage = {
       id: "user-budget",
       role: "user",
-      parts: [{ type: "text", text: "连续读取画板。" }],
+      parts: [{ type: "text", text: "本轮已关闭 Agent Skills。连续读取画板。" }],
     };
     const firstModel = new MockLanguageModelV3({
       doStream: async () => ({

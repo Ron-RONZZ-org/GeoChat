@@ -5,7 +5,7 @@ import { activeNativeToolNames } from "../backend/src/agent/native-chat";
 import { createBackendLanguageModel } from "../backend/src/agent/ai-sdk-models";
 import { selectAgentSkillsForRun } from "../backend/src/agent/skill-selector";
 import { createBackendPlanningTools } from "../backend/src/agent/ai-sdk-tools";
-import { refineExecuteGeoGebraCommands, validateNativeToolInput } from "../backend/src/agent/native-tool-policy";
+import { validateNativeToolInput } from "../backend/src/agent/native-tool-policy";
 
 const availableTools: FunctionCallToolName[] = [
   "getCanvasContext",
@@ -78,26 +78,36 @@ describe("AI SDK native integration boundaries", () => {
     expect(valid?.success).toBe(true);
   });
 
-  test("uses AI SDK input refinement for safe style and viewport normalization", () => {
-    const refined = refineExecuteGeoGebraCommands({
-      commands: [
-        "O = (0, 0)",
-        "c = Circle(O, 3)",
-        "SetLineThickness(c, 3)",
-        "ZoomIn(-3, -1.2, 3, 3.4)",
-      ],
-      reason: "Draw and frame the circle.",
-    }, {
+  test("rejects unsupported GeoGebra commands with actionable feedback instead of rewriting them", () => {
+    const unsupported = validateNativeToolInput("executeGeoGebraCommands", {
+      commands: ["SetOpacity(c, 0.4)", "HideLabel(aux)", "E = Maximum(f)"],
+    }, { prompt: "画一个圆", locale: "zh-CN" });
+    expect(unsupported).toMatchObject({ success: false });
+    if (!unsupported.success) {
+      expect(unsupported.error.message).toContain("SetOpacity");
+      expect(unsupported.error.message).toContain("SetFilling");
+      expect(unsupported.error.message).toContain("HideLabel");
+      expect(unsupported.error.message).toContain("Maximum");
+    }
+  });
+
+  test("leaves style and label commands unchanged at the tool boundary (no silent stripping)", () => {
+    const commands = [
+      "O = (0, 0)",
+      "c = Circle(O, 3)",
+      "SetLineThickness(c, 3)",
+      "SetLabelMode(O, 3)",
+      "ZoomIn(-3, -1.2, 3, 3.4)",
+    ];
+    const result = validateNativeToolInput("executeGeoGebraCommands", { commands }, {
       prompt: "画一个二维圆并标出圆心。",
       locale: "zh-CN",
     });
-    expect(refined.commands).toEqual([
-      "O = (0, 0)",
-      "c = Circle(O, 3)",
-      "ZoomIn(-3, -1.9, 3, 4.1)",
-    ]);
-    expect(refined.reason).toContain("违规命令：SetLineThickness");
-    expect(refined.reason).toContain("1:1 比例");
+    expect(result).toMatchObject({ success: true });
+    if (result.success) expect(result.value.commands).toEqual(commands);
+  });
+
+  test("rejects oversized command batches", () => {
     expect(validateNativeToolInput("executeGeoGebraCommands", {
       commands: Array.from({ length: 101 }, (_, index) => `P${index} = (${index}, 0)`),
     }, { prompt: "画点", locale: "zh-CN" })).toMatchObject({ success: false });
@@ -133,7 +143,8 @@ describe("AI SDK native integration boundaries", () => {
             text: JSON.stringify({
               status: "not_needed",
               curriculumNodes: [],
-              selectedSkills: [],
+              domainSkills: [],
+              craftSkills: [],
               selectorReason: "The deterministic candidate context is sufficient.",
             }),
           }],

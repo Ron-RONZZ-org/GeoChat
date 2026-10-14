@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
   DefaultChatTransport,
@@ -23,6 +23,7 @@ import {
   type StoredActiveNativeRun,
 } from "../features/agent-run/activeRunStorage";
 import { executeRendererTool } from "../features/agent-run/toolWorker";
+import { commandsWithApprovedReview, planCommandApproval } from "../features/agent-run/toolApproval";
 import { desktopLogger } from "../features/desktop/desktopLogger";
 import {
   promptWithSkillPolicy,
@@ -34,6 +35,18 @@ type ChatMessage = UIMessage<ChatMessageMetadata>;
 type SendMessageInput = { text?: string; files?: FileUIPart[] };
 type SendMessageOptions = { body?: { conversationId?: string } };
 type ActiveNativeRun = { runId: string; conversationId: string };
+
+export type PendingToolApproval = {
+  toolCallId: string;
+  /** Commands that will run regardless of the decision. */
+  autoCommands: string[];
+  /** Style commands the user must approve or reject. */
+  reviewCommands: string[];
+};
+
+export type ToolApprovalDecision = {
+  approvedReviewCommands: string[];
+};
 
 const NATIVE_CHAT_NETWORK_RETRY_DELAYS_MS = [750, 1_500, 3_000] as const;
 
@@ -68,6 +81,25 @@ export function useAgentRunChat(input: {
   const networkRetryAttemptRef = useRef(0);
   const networkRetryTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const retryCurrentRequestRef = useRef<(() => Promise<void>) | null>(null);
+  const [pendingToolApproval, setPendingToolApproval] = useState<PendingToolApproval | null>(null);
+  const approvalResolverRef = useRef<((decision: ToolApprovalDecision) => void) | null>(null);
+  const requestToolApproval = (request: PendingToolApproval) =>
+    new Promise<ToolApprovalDecision>((resolve) => {
+      approvalResolverRef.current = resolve;
+      setPendingToolApproval(request);
+    });
+  const resolveToolApproval = useCallback((decision: ToolApprovalDecision) => {
+    const resolve = approvalResolverRef.current;
+    approvalResolverRef.current = null;
+    setPendingToolApproval(null);
+    resolve?.(decision);
+  }, []);
+  const cancelPendingToolApproval = () => {
+    const resolve = approvalResolverRef.current;
+    approvalResolverRef.current = null;
+    setPendingToolApproval(null);
+    resolve?.({ approvedReviewCommands: [] });
+  };
 
   const clearNetworkRetry = () => {
     if (networkRetryTimerRef.current !== null) globalThis.clearTimeout(networkRetryTimerRef.current);
@@ -157,7 +189,33 @@ export function useAgentRunChat(input: {
       const generation = runGenerationRef.current;
       const isCurrentRun = () => activeRunRef.current?.runId === runId && runGenerationRef.current === generation;
       try {
-        const result = await executeRendererTool(toolName, toolCall.input);
+        let input = toolCall.input;
+        if (toolName === "executeGeoGebraCommands" && asRecord((toolCall as { toolMetadata?: unknown }).toolMetadata).styleApprovalRequired === true) {
+          const commands = stringArrayFrom(asRecord(input).commands);
+          const plan = planCommandApproval(commands);
+          if (plan.reviewCommands.length) {
+            const decision = await requestToolApproval({
+              toolCallId: toolCall.toolCallId,
+              autoCommands: plan.autoCommands,
+              reviewCommands: plan.reviewCommands,
+            });
+            if (!isCurrentRun()) return;
+            if (!decision.approvedReviewCommands.length) {
+              queueToolOutput(addToolOutputRef.current, {
+                tool: toolName,
+                toolCallId: toolCall.toolCallId,
+                state: "output-error",
+                errorText: "The user rejected the style commands; continue without them.",
+              }, isCurrentRun);
+              return;
+            }
+            input = {
+              ...asRecord(input),
+              commands: commandsWithApprovedReview(commands, plan.reviewCommands, decision.approvedReviewCommands),
+            };
+          }
+        }
+        const result = await executeRendererTool(toolName, input);
         if (!isCurrentRun()) return;
         if (result.ok) {
           queueToolOutput(addToolOutputRef.current, {
@@ -315,6 +373,7 @@ export function useAgentRunChat(input: {
     activeRunRef.current = null;
     runGenerationRef.current += 1;
     clearNetworkRetry();
+    cancelPendingToolApproval();
     await chat.stop();
     if (!active) return;
     const current = inputRef.current;
@@ -332,7 +391,17 @@ export function useAgentRunChat(input: {
     stop,
     status: chat.status,
     error: chat.error,
+    pendingToolApproval,
+    resolveToolApproval,
   };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringArrayFrom(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 export function nativeChatNetworkRetryDelay(attempt: number) {

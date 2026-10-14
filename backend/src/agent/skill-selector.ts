@@ -14,7 +14,6 @@ import {
   extractAgentSkillConstraintBrief,
   filterBusinessReadyAgentSkills,
   listAvailableAgentSkills,
-  searchAvailableAgentSkills,
   type AgentSkillBrief,
   type AgentSkillSummary
 } from "./skills";
@@ -26,17 +25,28 @@ import {
 } from "./curriculum";
 
 const SKILL_SELECTOR_TIMEOUT_MS = 30_000;
+const MAX_CURRICULUM_NODES = 3;
+const MAX_DOMAIN_SKILLS = 5;
+const MAX_CRAFT_SKILLS = 3;
+// Process/presentation skills live under these categories. The backend routes
+// skills here by category rather than trusting the selector's placement, so the
+// per-group caps hold even if the model misroutes.
+const CRAFT_SKILL_CATEGORIES = new Set(["geogebra-workflow", "visual-post-processing"]);
 const skillSelectionCache = new Map<string, Promise<AgentSkillSelectionPacket>>();
 const skillSelectorOutputSchema = z.object({
   status: z.enum(["selected", "not_needed"]),
   curriculumNodes: z.array(z.object({
     id: z.string().min(1),
     reason: z.string().min(1),
-  })).max(3),
-  selectedSkills: z.array(z.object({
+  })).max(MAX_CURRICULUM_NODES),
+  domainSkills: z.array(z.object({
     name: z.string().min(1),
     reason: z.string().min(1),
-  })).max(3),
+  })).max(MAX_DOMAIN_SKILLS),
+  craftSkills: z.array(z.object({
+    name: z.string().min(1),
+    reason: z.string().min(1),
+  })).max(MAX_CRAFT_SKILLS),
   selectorReason: z.string().min(1),
 });
 
@@ -76,7 +86,10 @@ export type AgentSkillSelectionPacket = {
   status: AgentSkillSelectionStatus;
   visualProfile?: string;
   curriculumNodes: AgentCurriculumSelectionItem[];
-  selectedSkills: AgentSkillSelectionItem[];
+  /** Subject-matter mathematical skills (what the problem is about). */
+  domainSkills: AgentSkillSelectionItem[];
+  /** GeoGebra authoring, presentation, and interaction skills (how to build it). */
+  craftSkills: AgentSkillSelectionItem[];
   enabledAdvancedTools: string[];
   selectorReason: string;
   injectedContext: string;
@@ -113,7 +126,8 @@ export async function selectAgentSkillsForRun(input: {
       status: "disabled",
       visualProfile: policy.visualProfile,
       curriculumNodes: [],
-      selectedSkills: [],
+      domainSkills: [],
+      craftSkills: [],
       enabledAdvancedTools: [],
       selectorReason: !policy.enabled
         ? "Agent Skills are disabled for this run."
@@ -131,7 +145,8 @@ export async function selectAgentSkillsForRun(input: {
       runId: input.run.runId,
       conversationId: input.run.conversationId,
       status: packet.status,
-      skills: packet.selectedSkills.map((skill) => skill.name),
+      domainSkills: packet.domainSkills.map((skill) => skill.name),
+      craftSkills: packet.craftSkills.map((skill) => skill.name),
       curriculumNodes: packet.curriculumNodes.map((node) => node.id),
       enabledAdvancedTools: packet.enabledAdvancedTools,
     }));
@@ -155,7 +170,8 @@ async function runSkillSelector(input: {
         status: "not_needed",
         visualProfile: policy.visualProfile,
         curriculumNodes: [],
-        selectedSkills: [],
+        domainSkills: [],
+        craftSkills: [],
         enabledAdvancedTools: [],
         selectorReason: "No curriculum node or skill candidate matched this run.",
         injectedContext: ""
@@ -188,7 +204,7 @@ async function runSkillSelector(input: {
       }),
       output: Output.object({
         name: "geochat_skill_selection",
-        description: "A compact selection of curriculum nodes and GeoChat skills for the current run.",
+        description: "A compact selection of curriculum nodes, domain skills, and craft skills for the current run.",
         schema: skillSelectorOutputSchema,
       }),
     });
@@ -203,7 +219,7 @@ async function runSkillSelector(input: {
       },
     };
   } catch (error) {
-    console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:155", error);
+    console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:238", error);
     if (candidateContext) {
       return {
         ...await enrichSkillSelectionPacket(
@@ -219,7 +235,8 @@ async function runSkillSelector(input: {
       status: "failed",
       visualProfile: policy.visualProfile,
       curriculumNodes: [],
-      selectedSkills: [],
+      domainSkills: [],
+      craftSkills: [],
       enabledAdvancedTools: [],
       selectorReason: "Temporary skill selector failed; continue without a preloaded skill packet.",
       injectedContext: "",
@@ -236,7 +253,7 @@ async function buildSkillSelectorCandidateContext(
   const routingPrompt = agentRoutingPrompt(run.prompt);
   const catalogs = listCurriculumCatalogs();
   const curriculumMatches = searchCurriculum({ query: routingPrompt, limit: 5 });
-  const curriculumNodes = curriculumMatches.slice(0, 3).map((match): AgentCurriculumSelectionItem => ({
+  const curriculumNodes = curriculumMatches.slice(0, MAX_CURRICULUM_NODES).map((match): AgentCurriculumSelectionItem => ({
     id: match.id,
     source: match.source,
     stage: match.stage,
@@ -250,46 +267,30 @@ async function buildSkillSelectorCandidateContext(
     reason: `Matched ${match.matchedFields.slice(0, 4).join(", ") || "curriculum index"} with score ${match.score}.`
   }));
   const allowed = policy.allowedSkillNames?.length ? new Set(policy.allowedSkillNames.map((name) => name.toLowerCase())) : null;
-  const availableSkills = filterBusinessReadyAgentSkills(await listAvailableAgentSkills()).filter((skill) => !allowed || allowed.has(skill.name.toLowerCase()));
-  const availableByName = new Map(availableSkills.map((skill) => [skill.name.toLowerCase(), skill]));
-  const curriculumSkillNames = curriculumNodes.flatMap((node) => node.skillIds);
-  const curriculumRecipeNames = curriculumNodes.flatMap((node) => node.recipeIds);
-  const skillSearchQuery = [routingPrompt, ...curriculumSkillNames, ...curriculumRecipeNames].filter(Boolean).join("\n");
-  const searchedSkills = filterBusinessReadyAgentSkills(await searchAvailableAgentSkills({ query: skillSearchQuery, limit: 12 }));
-  const candidates = new Map<string, AgentSkillSummary>();
-  for (const name of curriculumSkillNames) {
-    const skill = availableByName.get(name.toLowerCase());
-    if (skill) candidates.set(skill.name.toLowerCase(), skill);
-  }
-  for (const skill of searchedSkills) {
-    if (!allowed || allowed.has(skill.name.toLowerCase())) candidates.set(skill.name.toLowerCase(), skill);
-  }
-  for (const skill of availableSkills) {
-    if (candidates.size >= 12) break;
-    if (skill.category && curriculumNodes.some((node) => node.skillIds.includes(skill.name))) candidates.set(skill.name.toLowerCase(), skill);
-  }
-  const skillBriefs = await Promise.all(
-    [...candidates.values()].slice(0, 12).map(async (skill) => {
-      const relatedNodes = curriculumNodes.filter((node) => node.skillIds.includes(skill.name));
-      const visualProfiles = [
-        ...(policy.visualProfile ? [policy.visualProfile] : []),
-        ...relatedNodes.flatMap((node) => node.visualProfiles)
-      ];
-      let constraintsBrief: string[] = [];
-      try {
-        const activated = await activateAgentSkill(skill.name);
-        constraintsBrief = extractAgentSkillConstraintBrief(activated.markdown);
-      } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:227", caughtError);
-        constraintsBrief = [];
-      }
-      return createAgentSkillBrief(skill, {
-        curriculumIds: relatedNodes.map((node) => node.id),
-        visualProfiles,
-        constraintsBrief
-      });
-    })
+  // The full allowed catalog is handed to the selector LLM. A keyword/text
+  // pre-filter was proven to drop the right skill (e.g. locus problems never
+  // surfaced `locus-envelope`), so selection is left to semantic reasoning.
+  const availableSkills = filterBusinessReadyAgentSkills(await listAvailableAgentSkills())
+    .filter((skill) => !allowed || allowed.has(skill.name.toLowerCase()));
+  // Curriculum-referenced skills first, then alphabetical; ordering is a hint,
+  // every candidate is still present.
+  const referenced = new Set(curriculumNodes.flatMap((node) => node.skillIds));
+  const orderedSkills = [...availableSkills].sort((left, right) =>
+    Number(referenced.has(right.name)) - Number(referenced.has(left.name)) || left.name.localeCompare(right.name)
   );
+  // Briefs are lightweight: no per-candidate SKILL.md read. Constraints are
+  // extracted after selection, only for the chosen skills.
+  const skillBriefs = orderedSkills.map((skill) => {
+    const relatedNodes = curriculumNodes.filter((node) => node.skillIds.includes(skill.name));
+    const visualProfiles = [
+      ...(policy.visualProfile ? [policy.visualProfile] : []),
+      ...relatedNodes.flatMap((node) => node.visualProfiles)
+    ];
+    return createAgentSkillBrief(skill, {
+      curriculumIds: relatedNodes.map((node) => node.id),
+      visualProfiles
+    });
+  });
   return {
     catalogs,
     curriculumNodes,
@@ -335,28 +336,34 @@ function skillSelectionToolsDisabled(disabledToolNames: readonly FunctionCallToo
   return ["listSkills", "searchSkills", "loadSkill"].some((toolName) => disabled.has(toolName as FunctionCallToolName));
 }
 
+function isCraftSkillCategory(category?: string) {
+  return Boolean(category && CRAFT_SKILL_CATEGORIES.has(category));
+}
+
 export function skillSelectorSystemPrompt(locale?: AgentRunLedgerRecord["locale"]) {
   if (isEnglishLocale(locale)) {
     return [
       "You are GeoChat's temporary SkillSelector.",
-      "Your job is to choose from a compact Candidate Skill Context before the main agent solves the problem.",
-      "The backend has already run the deterministic list/search/load pipeline: curriculum search, skill inventory filtering, skill search, and short SKILL.md constraint extraction. Do not ask for tools and do not invent skills outside the provided skillBriefs.",
-      "Choose skills as a complementary set: prefer one broad parent skill plus one or two precise second-layer skills/recipes when that improves drawing, explanation, or verification. If the broad parent adds no useful rule beyond the precise skill, select only the precise skill.",
+      "Your job is to choose from the Candidate Skill Context before the main agent solves the problem.",
+      "The Candidate Skill Context lists the full available skill catalog (name, description, category, recipes, tags). The backend loads the selected SKILL.md files and builds compressed guidance after your choice; do not ask for tools and do not invent skills outside the catalog.",
+      "Split your choice into two groups. domainSkills are subject-matter mathematical skills (what the problem is about). craftSkills are GeoGebra authoring, presentation, and interaction skills (how to build, present, and operate the figure).",
+      "Choose skills as a complementary set: prefer one broad parent skill plus one or two precise second-layer skills/recipes. If the broad parent adds no useful rule beyond the precise skill, select only the precise skill.",
       "The main agent must not receive the full catalog. The backend will load selected SKILL.md files and build the compressed guidance after your choice.",
       "Do not solve the problem. Do not plan concrete GeoGebra command batches. Do not include chain-of-thought.",
       "Fill the requested structured output fields with a compact selection.",
-      "Select at most three curriculum nodes and at most three skills. If no skill is useful after listing/searching, use status not_needed and explain why no skill is needed."
+      `Select at most ${MAX_CURRICULUM_NODES} curriculum nodes, at most ${MAX_DOMAIN_SKILLS} domain skills, and at most ${MAX_CRAFT_SKILLS} craft skills. If no skill is useful after reviewing the catalog, use status not_needed and explain why no skill is needed.`
     ].join("\n");
   }
   return [
     "你是 GeoChat 的临时 SkillSelector。",
     "你的任务是在主 agent 解题前，从压缩 Candidate Skill Context 中选择技能。",
-    "后端已经用代码完成确定性的 list/search/load 流程：教材章节检索、技能库存过滤、技能检索，以及从 SKILL.md 提取短约束。不要请求工具，也不要选择 skillBriefs 之外的技能。",
+    "Candidate Skill Context 列出全部可用技能目录（名称、描述、category、recipes、tags）。后端会在你选择后读取所选 SKILL.md 并生成压缩指导；不要请求工具，也不要选择目录之外的技能。",
+    "把选择分成两组：domainSkills 是学科数学技能（题目考什么）；craftSkills 是 GeoGebra 作图书面、呈现与交互技能（怎么画、怎么展示、怎么操作）。",
     "技能选择要按互补关系装配：优先选择一个宽领域父技能加一到两个精确二级技能/recipe；如果父技能没有额外规则，只选择精确技能。",
     "主 agent 不应收到完整技能目录；后端会在你选择后读取对应 SKILL.md 并生成压缩指导。",
     "不要解题，不要规划具体 GeoGebra 命令批次，不要输出思维链。",
     "按请求的结构化输出字段返回精简的选择结果。",
-    "最多选择三个教材节点和三个技能；列出/检索后仍无明显帮助时返回 status=not_needed，并说明为什么不需要技能。"
+    `最多选择 ${MAX_CURRICULUM_NODES} 个教材节点、${MAX_DOMAIN_SKILLS} 个 domainSkills 和 ${MAX_CRAFT_SKILLS} 个 craftSkills；审阅目录后仍无明显帮助时返回 status=not_needed，并说明为什么不需要技能。`
   ].join("\n");
 }
 
@@ -403,20 +410,27 @@ function normalizeSkillSelectionPacket(value: unknown, policy: AgentSkillRuntime
     ? record.curriculumNodes
         .map(normalizeSelectedCurriculumNode)
         .filter((item): item is AgentCurriculumSelectionItem => Boolean(item))
-        .slice(0, 3)
+        .slice(0, MAX_CURRICULUM_NODES)
     : [];
-  const selectedSkills = Array.isArray(record.selectedSkills)
-    ? record.selectedSkills
+  const domainSkills = Array.isArray(record.domainSkills)
+    ? record.domainSkills
         .map(normalizeSelectedSkill)
         .filter((skill): skill is AgentSkillSelectionItem => Boolean(skill))
-        .slice(0, 3)
+        .slice(0, MAX_DOMAIN_SKILLS)
     : [];
-  const status = selectedSkills.length || curriculumNodes.length ? "selected" : "not_needed";
+  const craftSkills = Array.isArray(record.craftSkills)
+    ? record.craftSkills
+        .map(normalizeSelectedSkill)
+        .filter((skill): skill is AgentSkillSelectionItem => Boolean(skill))
+        .slice(0, MAX_CRAFT_SKILLS)
+    : [];
+  const status = domainSkills.length || craftSkills.length || curriculumNodes.length ? "selected" : "not_needed";
   return {
     status,
     visualProfile: policy.visualProfile,
     curriculumNodes,
-    selectedSkills,
+    domainSkills,
+    craftSkills,
     enabledAdvancedTools: [],
     selectorReason: stringValue(record.selectorReason) ?? (status === "selected" ? "A matching skill was selected." : "No skill was clearly needed."),
     injectedContext: stringValue(record.injectedContext) ?? "",
@@ -428,20 +442,32 @@ function deterministicSkillSelectionPacket(
   policy: AgentSkillRuntimePolicy,
   error?: unknown
 ): AgentSkillSelectionPacket {
-  const selectedSkills = context.skillBriefs.slice(0, 3).map((skill): AgentSkillSelectionItem => ({
-    name: skill.name,
-    ...(skill.category ? { category: skill.category } : {}),
-    ...(skill.parent ? { parent: skill.parent } : {}),
-    ...(skill.level ? { level: skill.level } : {}),
-    recipes: skill.recipeIds,
-    reason: "Selected by deterministic fallback from the prebuilt skill candidate context."
-  }));
-  const status = selectedSkills.length || context.curriculumNodes.length ? "selected" : "failed";
+  const domainSkills: AgentSkillSelectionItem[] = [];
+  const craftSkills: AgentSkillSelectionItem[] = [];
+  // Only skills linked to a matched curriculum node are safe to inject when the
+  // selector LLM fails; the full catalog has no relevance signal of its own.
+  for (const skill of context.skillBriefs.filter((brief) => brief.curriculumIds.length)) {
+    const item: AgentSkillSelectionItem = {
+      name: skill.name,
+      ...(skill.category ? { category: skill.category } : {}),
+      ...(skill.parent ? { parent: skill.parent } : {}),
+      ...(skill.level ? { level: skill.level } : {}),
+      recipes: skill.recipeIds,
+      reason: "Selected by deterministic fallback from the prebuilt skill candidate context."
+    };
+    if (isCraftSkillCategory(skill.category)) {
+      if (craftSkills.length < MAX_CRAFT_SKILLS) craftSkills.push(item);
+    } else if (domainSkills.length < MAX_DOMAIN_SKILLS) {
+      domainSkills.push(item);
+    }
+  }
+  const status = domainSkills.length || craftSkills.length || context.curriculumNodes.length ? "selected" : "failed";
   return {
     status,
     visualProfile: policy.visualProfile,
-    curriculumNodes: context.curriculumNodes.slice(0, 3),
-    selectedSkills,
+    curriculumNodes: context.curriculumNodes.slice(0, MAX_CURRICULUM_NODES),
+    domainSkills,
+    craftSkills,
     enabledAdvancedTools: [],
     selectorReason: status === "selected"
       ? "Temporary skill selector failed; deterministic candidate context was used."
@@ -457,7 +483,7 @@ async function enrichSkillSelectionPacket(
   candidateContext?: SkillSelectorCandidateContext,
   locale?: AgentRunLedgerRecord["locale"]
 ): Promise<AgentSkillSelectionPacket> {
-  if (!packet.selectedSkills.length && !packet.curriculumNodes.length) return packet;
+  if (!packet.domainSkills.length && !packet.craftSkills.length && !packet.curriculumNodes.length) return packet;
   const allowed = policy.allowedSkillNames?.length ? new Set(policy.allowedSkillNames.map((name) => name.toLowerCase())) : null;
   const summaries = new Map((await listAvailableAgentSkills()).map((skill) => [skill.name.toLowerCase(), skill]));
   const curriculumNodes = packet.curriculumNodes
@@ -478,35 +504,22 @@ async function enrichSkillSelectionPacket(
           reason: selected.reason
         };
       } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:447", caughtError);
+        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:463", caughtError);
         return undefined;
       }
     })
     .filter((item): item is AgentCurriculumSelectionItem => Boolean(item));
-  const selectedSkillInputs = packet.selectedSkills.length
-    ? packet.selectedSkills
-    : candidateSkillSelectionsFromCurriculum(curriculumNodes, summaries, allowed, candidateContext);
-  const selectedSkills = selectedSkillInputs
-    .map((selected): AgentSkillSelectionItem | undefined => {
-      const summary = summaries.get(selected.name.toLowerCase());
-      if (!summary || (allowed && !allowed.has(summary.name.toLowerCase()))) return undefined;
-      const enriched: AgentSkillSelectionItem = {
-        name: summary.name,
-        recipes: summary.recipes,
-        reason: selected.reason
-      };
-      if (summary.category) enriched.category = summary.category;
-      if (summary.parent) enriched.parent = summary.parent;
-      if (summary.level) enriched.level = summary.level;
-      return enriched;
-    })
-    .filter((skill): skill is AgentSkillSelectionItem => Boolean(skill));
+  const requestedSkills = packet.domainSkills.length || packet.craftSkills.length
+    ? [...packet.domainSkills, ...packet.craftSkills]
+    : candidateSkillSelectionsFromCurriculum(curriculumNodes, summaries, allowed);
+  const { domainSkills, craftSkills } = routeSelectedSkills(requestedSkills, summaries, allowed);
+  const selectedSkills = [...domainSkills, ...craftSkills];
   const activatedSkills = await Promise.all(
     selectedSkills.map(async (skill) => {
       try {
         return await activateAgentSkill(skill.name);
       } catch (caughtError) {
-        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:474", caughtError);
+        console.error("[ERROR] Caught exception at backend/src/agent/skill-selector.ts:492", caughtError);
         return undefined;
       }
     })
@@ -520,7 +533,8 @@ async function enrichSkillSelectionPacket(
         ...packet,
         status: "selected",
         curriculumNodes,
-        selectedSkills: [],
+        domainSkills: [],
+        craftSkills: [],
         enabledAdvancedTools: [],
         injectedContext: buildSkillSelectionInjectedContext({
           locale,
@@ -536,7 +550,8 @@ async function enrichSkillSelectionPacket(
       ...packet,
       status: "not_needed",
       curriculumNodes,
-      selectedSkills: [],
+      domainSkills: [],
+      craftSkills: [],
       enabledAdvancedTools: [],
       selectorReason: "The selector did not return a valid allowed skill.",
       injectedContext: ""
@@ -546,7 +561,8 @@ async function enrichSkillSelectionPacket(
     ...packet,
     status: "selected",
     curriculumNodes,
-    selectedSkills,
+    domainSkills,
+    craftSkills,
     enabledAdvancedTools,
     injectedContext: buildSkillSelectionInjectedContext({
       locale,
@@ -559,16 +575,48 @@ async function enrichSkillSelectionPacket(
   };
 }
 
+/**
+ * Resolve requested skill names against the catalog, re-route each skill to its
+ * category's group (domain vs craft), dedupe, and enforce the per-group caps.
+ * The selector's own grouping is treated as a hint; this keeps the caps true.
+ */
+function routeSelectedSkills(
+  requestedSkills: readonly AgentSkillSelectionItem[],
+  summaries: ReadonlyMap<string, AgentSkillSummary>,
+  allowed: Set<string> | null
+) {
+  const domainSkills: AgentSkillSelectionItem[] = [];
+  const craftSkills: AgentSkillSelectionItem[] = [];
+  const seen = new Set<string>();
+  for (const selected of requestedSkills) {
+    const summary = summaries.get(selected.name.toLowerCase());
+    if (!summary || (allowed && !allowed.has(summary.name.toLowerCase()))) continue;
+    const key = summary.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const item: AgentSkillSelectionItem = {
+      name: summary.name,
+      ...(summary.category ? { category: summary.category } : {}),
+      ...(summary.parent ? { parent: summary.parent } : {}),
+      ...(summary.level ? { level: summary.level } : {}),
+      recipes: summary.recipes,
+      reason: selected.reason
+    };
+    if (isCraftSkillCategory(summary.category)) {
+      if (craftSkills.length < MAX_CRAFT_SKILLS) craftSkills.push(item);
+    } else if (domainSkills.length < MAX_DOMAIN_SKILLS) {
+      domainSkills.push(item);
+    }
+  }
+  return { domainSkills, craftSkills };
+}
+
 function candidateSkillSelectionsFromCurriculum(
   curriculumNodes: readonly AgentCurriculumSelectionItem[],
   summaries: ReadonlyMap<string, AgentSkillSummary>,
-  allowed: Set<string> | null,
-  candidateContext?: SkillSelectorCandidateContext
+  allowed: Set<string> | null
 ) {
-  const candidateNames = [
-    ...curriculumNodes.flatMap((node) => node.skillIds),
-    ...(candidateContext?.skillBriefs.map((skill) => skill.name) ?? [])
-  ];
+  const candidateNames = curriculumNodes.flatMap((node) => node.skillIds);
   const selections: AgentSkillSelectionItem[] = [];
   for (const name of candidateNames) {
     const summary = summaries.get(name.toLowerCase());
@@ -582,7 +630,7 @@ function candidateSkillSelectionsFromCurriculum(
       recipes: summary.recipes,
       reason: "Selected from matched curriculum node skillIds."
     });
-    if (selections.length >= 3) break;
+    if (selections.length >= MAX_DOMAIN_SKILLS + MAX_CRAFT_SKILLS) break;
   }
   return selections;
 }
@@ -674,14 +722,8 @@ export function formatSkillSelectionPacketPrompt(packet: AgentSkillSelectionPack
       "[Preselected Agent Skill packet]",
       `Status: ${packet.status}.`,
       `Visual profile: ${packet.visualProfile ?? "unspecified"}.`,
-      packet.selectedSkills.length
-        ? [
-            "Selected skills:",
-            ...packet.selectedSkills.map((skill) =>
-              `- ${skill.name}${skill.recipes.length ? ` (recipes: ${skill.recipes.join(", ")})` : ""}: ${skill.reason}`
-            )
-          ].join("\n")
-        : "Selected skills: none.",
+      ...formatSelectedSkillLines(packet.domainSkills, "Domain skills (mathematics)", "en-US"),
+      ...formatSelectedSkillLines(packet.craftSkills, "Craft skills (GeoGebra authoring/presentation)", "en-US"),
       packet.curriculumNodes.length
         ? [
             "Curriculum localization:",
@@ -709,14 +751,8 @@ export function formatSkillSelectionPacketPrompt(packet: AgentSkillSelectionPack
     "【预选 Agent Skill Packet】",
     `状态：${packet.status}。`,
     `可视化表达策略：${packet.visualProfile ?? "未指定"}。`,
-    packet.selectedSkills.length
-      ? [
-          "已选技能：",
-          ...packet.selectedSkills.map((skill) =>
-            `- ${skill.name}${skill.recipes.length ? `（recipes：${skill.recipes.join("、")}）` : ""}：${skill.reason}`
-          )
-        ].join("\n")
-      : "已选技能：无。",
+    ...formatSelectedSkillLines(packet.domainSkills, "学科数学技能（domainSkills）", "zh-CN"),
+    ...formatSelectedSkillLines(packet.craftSkills, "作图书面与交互技能（craftSkills）", "zh-CN"),
     packet.curriculumNodes.length
       ? [
           "教材定位：",
@@ -739,6 +775,24 @@ export function formatSkillSelectionPacketPrompt(packet: AgentSkillSelectionPack
     packet.error ? `选择器错误：${packet.error}` : "",
     "该 packet 只作为策略提示，不是数学事实来源。除非 packet 缺失、失败或明显不足，否则主 agent 不要再次调用 listSkills、searchSkills、loadSkill 或 activateSkill。"
   ].filter(Boolean).join("\n");
+}
+
+function formatSelectedSkillLines(
+  skills: readonly AgentSkillSelectionItem[],
+  heading: string,
+  locale: "zh-CN" | "en-US"
+) {
+  if (!skills.length) return [`${heading}: none.`];
+  return [
+    `${heading}:`,
+    ...skills.map((skill) =>
+      skill.recipes.length
+        ? locale === "en-US"
+          ? `- ${skill.name} (recipes: ${skill.recipes.join(", ")}): ${skill.reason}`
+          : `- ${skill.name}（recipes：${skill.recipes.join("、")}）：${skill.reason}`
+        : `- ${skill.name}: ${skill.reason}`
+    )
+  ];
 }
 
 function formatAdvancedDrawingDefinitionForPacket(

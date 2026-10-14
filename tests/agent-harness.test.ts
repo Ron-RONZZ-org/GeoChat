@@ -64,13 +64,7 @@ import {
   ADVANCED_DRAWING_TOOL_NAMES,
   compileAdvancedDrawingCommand,
   getAdvancedDrawingToolDefinitions,
-  hasExplicitTwoDimensionalStyleIntent,
-  hasSemanticTwoDimensionalHighlightIntent,
-  findForbiddenFixedAxisObjectCommands,
-  findForbiddenTwoDimensionalStyleCommands,
-  findForbiddenViewportScaleCommands,
-  findGeoGebraCommandBatchPolicyViolations,
-  geogebraCommandBatchPolicyMessage,
+  findTwoDimensionalStyleCommands,
   agentRoutingPrompt,
   GEOCHAT_SYSTEM_PROMPT,
   GEOCHAT_SYSTEM_PROMPT_EN
@@ -654,7 +648,8 @@ describe("function call registry", () => {
           reason: "四面体外接球属于高中立体几何初步。"
         }
       ],
-      selectedSkills: [
+      craftSkills: [],
+      domainSkills: [
         {
           name: "pyramid-circumsphere",
           parent: "solid-geometry",
@@ -710,7 +705,8 @@ describe("function call registry", () => {
       status: "selected",
       visualProfile: "spatial-3d",
       curriculumNodes: [],
-      selectedSkills: [
+      craftSkills: [],
+      domainSkills: [
         {
           name: "solid-geometry",
           recipes: ["3d-skeleton-first"],
@@ -738,7 +734,8 @@ describe("function call registry", () => {
     const emptyPreflight = createBackendPlanningTools("zh-CN", [], {
       status: "not_needed",
       curriculumNodes: [],
-      selectedSkills: [],
+      craftSkills: [],
+      domainSkills: [],
       enabledAdvancedTools: [],
       selectorReason: "No matching skill or command family.",
       injectedContext: ""
@@ -754,7 +751,8 @@ describe("function call registry", () => {
       status: "disabled",
       visualProfile: "exam-clean",
       curriculumNodes: [],
-      selectedSkills: [],
+      craftSkills: [],
+      domainSkills: [],
       enabledAdvancedTools: [],
       selectorReason: "Automatic skill selection is disabled for this run.",
       injectedContext: ""
@@ -775,7 +773,8 @@ describe("function call registry", () => {
     const tools = createBackendPlanningTools("zh-CN", [], {
       status: "disabled",
       curriculumNodes: [],
-      selectedSkills: [],
+      craftSkills: [],
+      domainSkills: [],
       enabledAdvancedTools: [],
       selectorReason: "Agent Skills are disabled for this run.",
       injectedContext: ""
@@ -820,7 +819,8 @@ describe("function call registry", () => {
           reason: "四面体外接球属于高中立体几何初步。"
         }
       ],
-      selectedSkills: [
+      craftSkills: [],
+      domainSkills: [
         {
           name: "pyramid-circumsphere",
           parent: "solid-geometry",
@@ -859,7 +859,8 @@ describe("function call registry", () => {
         status: "selected",
         visualProfile: "spatial-3d",
         curriculumNodes: [],
-        selectedSkills: [
+        craftSkills: [],
+        domainSkills: [
           {
             name: "camera-framing",
             parent: "visual-post-processing",
@@ -902,7 +903,8 @@ describe("function call registry", () => {
         status: "selected",
         visualProfile: "exam-clean",
         curriculumNodes: [],
-        selectedSkills: [
+        craftSkills: [],
+        domainSkills: [
           {
             name: "viewport-scale-composition",
             parent: "visual-post-processing",
@@ -939,27 +941,26 @@ describe("function call registry", () => {
     expect(source).toContain("commandDelayMs: commands.length > 1 ? COMMAND_DELAY_MS : 0");
   });
 
-  test("instructs the temporary skill selector to choose from prebuilt candidate context", () => {
+  test("instructs the temporary skill selector to choose from the full candidate catalog", () => {
     const prompt = skillSelectorSystemPrompt("zh-CN");
     const promptEn = skillSelectorSystemPrompt("en-US");
 
     expect(prompt).toContain("从压缩 Candidate Skill Context 中选择技能");
     expect(prompt).toContain("Candidate Skill Context");
-    expect(prompt).toContain("后端已经用代码完成确定性的 list/search/load 流程");
+    expect(prompt).toContain("列出全部可用技能目录");
     expect(prompt).toContain("不要请求工具");
-    expect(prompt).toContain("不要选择 skillBriefs 之外的技能");
+    expect(prompt).toContain("不要选择目录之外的技能");
     expect(prompt).toContain("技能选择要按互补关系装配");
     expect(prompt).toContain("后端会在你选择后读取对应 SKILL.md");
-    expect(prompt).toContain("最多选择三个教材节点和三个技能");
+    expect(prompt).toContain("最多选择 3 个教材节点、5 个 domainSkills 和 3 个 craftSkills");
 
-    expect(promptEn).toContain("choose from a compact Candidate Skill Context");
     expect(promptEn).toContain("Candidate Skill Context");
-    expect(promptEn).toContain("deterministic list/search/load pipeline");
-    expect(promptEn).toContain("Do not ask for tools");
-    expect(promptEn).toContain("outside the provided skillBriefs");
+    expect(promptEn).toContain("full available skill catalog");
+    expect(promptEn).toContain("do not ask for tools");
+    expect(promptEn).toContain("outside the catalog");
     expect(promptEn).toContain("Choose skills as a complementary set");
-    expect(promptEn).toContain("load selected SKILL.md files");
-    expect(promptEn).toContain("at most three curriculum nodes and at most three skills");
+    expect(promptEn).toContain("loads the selected SKILL.md files");
+    expect(promptEn).toContain("at most 3 curriculum nodes, at most 5 domain skills, and at most 3 craft skills");
   });
 
   test("loads cached remote skills from bundled and user cache roots", async () => {
@@ -1125,9 +1126,9 @@ describe("function call registry", () => {
       ], { declaredNames: ["c", "poly", "aux", "f", "face", "base", "Apex"] })
     ).toEqual([
       "SetColor(c, 0.16470589, 0.43529412, 0.85882353)",
-      "SetFilling(poly, 0.25)",
-      "ShowLabel(aux, false)",
-      "E = Extremum(f)",
+      "SetOpacity(poly, 0.25)",
+      "HideLabel(aux)",
+      "E = Maximum(f)",
       "SetColor(face, 0.03921569, 0.07843138, 0.11764706)",
       "SetFilling(face, 0.4)",
       "a = Slider(0, 10, 1, 1, 120, false, true, false, false)",
@@ -2254,7 +2255,7 @@ describe("geometry semantics layer", () => {
       ])
     );
     expect(commands.some((command) => command.startsWith("SetPointSize("))).toBe(false);
-    expect(findForbiddenTwoDimensionalStyleCommands({ commands })).toEqual([]);
+    expect(findTwoDimensionalStyleCommands({ commands })).toEqual([]);
   });
 
   test("verifies geometry plans against canvas object evidence without pretending unknown relations passed", () => {

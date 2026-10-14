@@ -3,6 +3,7 @@ import {
   getFunctionCallModelInputJsonSchema,
   getFunctionCallPlanningToolNames,
   getFunctionCallSpec,
+  hasExplicitTwoDimensionalStyleIntent,
   isFunctionCallBackendExecutable,
   type FunctionCallArgsByName,
   type AgentRunLedgerRecord,
@@ -10,6 +11,11 @@ import {
 } from "@geochat-ai/app";
 import { skillRuntimePolicyFromPrompt, type AgentSkillSelectionPacket } from "./skill-selector";
 import { validateNativeToolInput, type NativeToolPolicyContext } from "./native-tool-policy";
+
+// Craft skills whose selection is itself a justification for 2D styling. When
+// one is active, styling the model applies is expected, so it does not require
+// user approval.
+const STYLING_CRAFT_SKILLS = new Set(["visual-style-system"]);
 
 export function createBackendPlanningTools(
   locale?: AgentRunLedgerRecord["locale"],
@@ -96,7 +102,12 @@ function createBackendPlanningTool<TToolName extends FunctionCallToolName>(
       idempotency: spec.idempotency ?? (spec.sideEffectLevel === "read" ? "idempotent" : spec.sideEffectLevel === "destructive" ? "non_idempotent" : "best_effort"),
       errorCodes: [...(spec.errorCodes ?? ["VALIDATION_ERROR", "EXECUTION_ERROR", "TIMEOUT", "CANCELLED"])],
       timeoutMs: spec.timeoutMs,
-      rollbackPolicy: spec.rollbackPolicy
+      rollbackPolicy: spec.rollbackPolicy,
+      // Renderer reads this from the tool call to decide whether a batch that
+      // contains 2D style commands must be approved by the user first.
+      ...(toolName === "executeGeoGebraCommands"
+        ? { styleApprovalRequired: styleApprovalRequiredForRun(policyContext.prompt, skillSelection) }
+        : {})
     },
     // Backend tools execute inside ToolLoopAgent. Renderer tools intentionally
     // omit execute so AI SDK UI can deliver them through onToolCall/addToolOutput.
@@ -118,4 +129,21 @@ function modelToolInputSchemaForRun(
     };
   }
   return schema;
+}
+
+/**
+ * Whether a batch containing 2D style commands must be approved by the user.
+ * Styling is justified when the user asked for appearance edits, or when a
+ * styling craft skill was selected for this run; otherwise the user decides.
+ * The visual profile alone is not a justification because one is always set.
+ */
+export function styleApprovalRequiredForRun(
+  prompt: string,
+  skillSelection?: AgentSkillSelectionPacket
+) {
+  if (hasExplicitTwoDimensionalStyleIntent(prompt)) return false;
+  const selected = skillSelection
+    ? [...skillSelection.domainSkills, ...skillSelection.craftSkills]
+    : [];
+  return !selected.some((skill) => STYLING_CRAFT_SKILLS.has(skill.name));
 }

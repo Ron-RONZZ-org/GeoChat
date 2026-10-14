@@ -14,7 +14,13 @@ type CommandSearchSelectionInput = {
     recipeIds: readonly string[];
     visualProfiles: readonly string[];
   }[];
-  selectedSkills: readonly {
+  domainSkills: readonly {
+    name: string;
+    category?: string;
+    parent?: string;
+    recipes: readonly string[];
+  }[];
+  craftSkills: readonly {
     name: string;
     category?: string;
     parent?: string;
@@ -286,7 +292,7 @@ function buildCommandSearchIntents(
     prompt,
     skillSelection.visualProfile ?? "",
     ...skillSelection.enabledAdvancedTools,
-    ...skillSelection.selectedSkills.flatMap((skill) => [
+    ...[...skillSelection.domainSkills, ...skillSelection.craftSkills].flatMap((skill) => [
       skill.name,
       skill.category ?? "",
       skill.parent ?? "",

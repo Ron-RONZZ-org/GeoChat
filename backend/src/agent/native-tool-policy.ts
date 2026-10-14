@@ -1,15 +1,11 @@
 import {
   findForbiddenFixedAxisObjectCommands,
-  findForbiddenTwoDimensionalStyleCommands,
-  findForbiddenViewportScaleCommands,
   findGeoGebraCommandBatchPolicyViolations,
+  findUnsupportedGeoGebraCommands,
   fixedAxisObjectPolicyMessage,
   geogebraCommandBatchPolicyMessage,
   isFunctionCallArgs,
-  repairViewportScaleCommand,
-  twoDimensionalStylePolicyMessage,
-  viewportScalePolicyMessage,
-  type ExecuteGeoGebraCommandsArgs,
+  unsupportedGeoGebraCommandPolicyMessage,
   type FunctionCallArgsByName,
   type FunctionCallToolName,
 } from "@geochat-ai/app";
@@ -34,6 +30,17 @@ export function validateNativeToolInput<TToolName extends FunctionCallToolName>(
     return { success: true, value };
   }
 
+  // Reject-with-feedback: unsupported commands, fixed-axis reassignment, and
+  // oversized/malformed batches fail validation so the AI SDK's repair path
+  // hands the reason back to the model. Nothing here silently rewrites or drops
+  // model output.
+  const unsupportedViolations = findUnsupportedGeoGebraCommands(value);
+  if (unsupportedViolations.length) {
+    return {
+      success: false,
+      error: new TypeError(unsupportedGeoGebraCommandPolicyMessage(unsupportedViolations, context.locale)),
+    };
+  }
   const fixedAxisViolations = findForbiddenFixedAxisObjectCommands(value);
   if (fixedAxisViolations.length) {
     return {
@@ -49,41 +56,4 @@ export function validateNativeToolInput<TToolName extends FunctionCallToolName>(
     };
   }
   return { success: true, value };
-}
-
-export function refineNativeToolInput<TToolName extends FunctionCallToolName>(
-  toolName: TToolName,
-  value: FunctionCallArgsByName[TToolName],
-  context: NativeToolPolicyContext,
-): FunctionCallArgsByName[TToolName] {
-  if (toolName !== "executeGeoGebraCommands") return value;
-  return refineExecuteGeoGebraCommands(value as ExecuteGeoGebraCommandsArgs, context) as FunctionCallArgsByName[TToolName];
-}
-
-export function refineExecuteGeoGebraCommands(
-  value: ExecuteGeoGebraCommandsArgs,
-  context: NativeToolPolicyContext,
-): ExecuteGeoGebraCommandsArgs {
-  const styleViolations = findForbiddenTwoDimensionalStyleCommands(value, { userPrompt: context.prompt });
-  const forbiddenStyleCommands = new Set(styleViolations.map((violation) => violation.command));
-  const viewportViolations = findForbiddenViewportScaleCommands(value);
-  const forbiddenViewportCommands = new Set(viewportViolations.map((violation) => violation.command));
-  const commands = value.commands
-    .filter((command) => !forbiddenStyleCommands.has(command))
-    .map((command) => forbiddenViewportCommands.has(command) ? repairViewportScaleCommand(command) ?? command : command);
-
-  if (commands.length === value.commands.length && commands.every((command, index) => command === value.commands[index])) {
-    return value;
-  }
-
-  const policyNotes = [
-    styleViolations.length ? twoDimensionalStylePolicyMessage(styleViolations, context.locale) : "",
-    viewportViolations.length ? viewportScalePolicyMessage(viewportViolations, context.locale) : "",
-  ].filter(Boolean);
-  const priorReason = typeof value.reason === "string" && value.reason.trim() ? `${value.reason.trim()} ` : "";
-  return {
-    ...value,
-    commands,
-    reason: `${priorReason}${policyNotes.join(" ")}`.trim(),
-  };
 }
