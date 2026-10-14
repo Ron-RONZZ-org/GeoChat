@@ -15,6 +15,10 @@
   --app-accent-focus: rgba(37, 99, 235, .58);
   --app-settings-surface: rgba(252, 253, 252, .78);
   --app-shell-background: #f4f7f5;
+  /* Height of the floating Tauri window titlebar. The canvas reserves this
+     strip when GeoGebra's own toolbar is shown, so the toolbar is not buried
+     under the titlebar's drag region. */
+  --geochat-titlebar-height: 48px;
 }
 
 
@@ -103,7 +107,11 @@ h2 { font-size: 18px; }
 .frontend-canvas { position: absolute; inset: 0; background: #fff; }
 .frontend-canvas-host { position: relative; z-index: 0; display: block; width: 100%; height: 100%; visibility: visible; opacity: 1; }
 .frontend-canvas-host > * { width: 100%; height: 100%; }
-.frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { width: 100% !important; height: 100% !important; }
+/* `.appletParameters` is an inline-block with no intrinsic width. Sizing it
+   explicitly keeps the `.GeoGebraFrame`'s 100% from resolving against a
+   shrink-to-fit box — which collapses the whole applet to a couple of pixels
+   when a GeoGebra view (for example the file chooser) replaces the canvas. */
+.frontend-canvas-host .applet_scaler, .frontend-canvas-host .appletParameters, .frontend-canvas-host .GeoGebraFrame { width: 100% !important; height: 100% !important; }
 .frontend-canvas-host .applet_scaler, .frontend-canvas-host .GeoGebraFrame { display: block !important; visibility: visible !important; opacity: 1 !important; }
 .frontend-canvas-host .GeoGebraFrame { position: relative !important; z-index: 0; overflow: hidden; }
 .frontend-canvas-host canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: none; }
@@ -206,6 +214,10 @@ h2 { font-size: 18px; }
 .frontend-canvas-error::after { transform: rotate(-45deg); }
 @keyframes frontend-spin { to { transform: rotate(360deg); } }
 .geochat-panel-host { position: fixed; z-index: 20; right: 20px; bottom: 20px; }
+/* GeoGebra's menu bar opens inside the applet, beneath the floating panel.
+   While a menu is open the panel steps aside so the menu can be clicked; it
+   comes straight back when the menu closes. */
+.geochat-panel-host-passthrough { pointer-events: none; }
 /* Window titlebar.
    Transparent, and floating over the canvas rather than pushing it down, so
    no drawing area is lost — the canvas shows straight through.
@@ -219,7 +231,7 @@ h2 { font-size: 18px; }
   position: fixed;
   inset: 0 0 auto 0;
   z-index: 15;
-  height: 48px;
+  height: var(--geochat-titlebar-height);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -241,6 +253,17 @@ h2 { font-size: 18px; }
 .window-titlebar-controls button:focus-visible { outline: 2px solid #07c160; outline-offset: -2px; }
 .window-titlebar-controls .window-titlebar-close:hover { background: #df574d; color: #fff; }
 .window-titlebar-controls svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+
+/* In the Tauri shell the titlebar floats over the top of the canvas. That is
+   fine for the sparse canvas, but GeoGebra's own toolbar and menu live in that
+   same top strip: the titlebar would sit on top of them and turn every toolbar
+   click into a window drag. When the full interface is shown, push the canvas
+   below the titlebar so the applet chrome is reachable. The simple canvas keeps
+   the edge-to-edge layout, where nothing is underneath the titlebar. */
+.geochat-tauri-shell .frontend-shell-canvas-chrome-full { background: #fff; }
+.geochat-tauri-shell .frontend-shell-canvas-chrome-full .frontend-canvas {
+  top: var(--geochat-titlebar-height);
+}
 
 .geochat-panel-host > .MuiPaper-root {
   box-shadow: 0 20px 54px rgba(24, 59, 36, .18), 0 2px 8px rgba(24, 59, 36, .08);

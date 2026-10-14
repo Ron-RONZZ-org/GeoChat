@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import RestartAltRounded from "@mui/icons-material/RestartAltRounded";
 import TuneRounded from "@mui/icons-material/TuneRounded";
 import { CircularProgress } from "@mui/material";
@@ -10,6 +10,7 @@ import { GeoGebraController } from "./geogebra/controller";
 import { installGeoGebraExportHandler } from "./geogebra/export-file";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
+import { useAppletMenuOpen } from "./hooks/useAppletMenuOpen";
 import { useCanvasChrome } from "./hooks/useCanvasChrome";
 import { currentAppLanguage, resolveAppLanguage } from "./i18n";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
@@ -21,11 +22,13 @@ export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
   const { mode: canvasChrome, toggle: toggleCanvasChrome } = useCanvasChrome();
+  const appletMenuOpen = useAppletMenuOpen(canvasRef);
   const appLanguage = resolveAppLanguage(i18n.language);
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [canvasIntroVisible, setCanvasIntroVisible] = useState(true);
+  const dismissWelcome = useCallback(() => setCanvasIntroVisible(false), []);
 
   // A shell that will not report its backend is a hard failure, not something
   // to paper over with a guessed port.
@@ -105,9 +108,17 @@ export default function App() {
   }
 
   return (
-    <main className="frontend-shell">
+    <main className={`frontend-shell${canvasChrome === "full" ? " frontend-shell-canvas-chrome-full" : ""}`}>
       <WindowTitleBar />
-      <section className="frontend-canvas" aria-label="GeoGebra 画板">
+      <section
+        className="frontend-canvas"
+        aria-label="GeoGebra 画板"
+        // The welcome intro has pointer-events: none so it never blocks the
+        // drawing surface. Any pointer landing on the canvas dismisses it:
+        // capture first, because the applet handles (and may stop) the same
+        // gesture deeper in the tree.
+        onPointerDownCapture={dismissWelcome}
+      >
         <div ref={canvasRef} className="frontend-canvas-host" />
         <AnimatePresence initial={false}>
           {canvasState === "ready" && canvasIntroVisible && (
@@ -167,10 +178,13 @@ export default function App() {
           </div>
         )}
       </section>
-      <div id="geochat-panel-host" className="geochat-panel-host">
+      <div
+        id="geochat-panel-host"
+        className={`geochat-panel-host${appletMenuOpen ? " geochat-panel-host-passthrough" : ""}`}
+      >
         <AssistantPanel
           canvasReady={canvasState === "ready"}
-          onConversationStarted={() => setCanvasIntroVisible(false)}
+          onWelcomeDismissed={dismissWelcome}
         />
       </div>
     </main>

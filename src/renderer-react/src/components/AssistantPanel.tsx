@@ -24,6 +24,7 @@ import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRound
 import LibraryBooksOutlined from "@mui/icons-material/LibraryBooksOutlined";
 import { Joyride, STATUS, type Step } from "react-joyride";
 import {
+  useCallback,
   useLayoutEffect,
   useEffect,
   useRef,
@@ -187,10 +188,11 @@ function TypewriterText({ text }: { text: string }) {
 
 export function AssistantPanel({
   canvasReady = true,
-  onConversationStarted,
+  onWelcomeDismissed,
 }: {
   canvasReady?: boolean;
-  onConversationStarted?: () => void;
+  /** Called when the user engages the canvas and the welcome can go away. */
+  onWelcomeDismissed?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const appTheme = useTheme();
@@ -366,10 +368,36 @@ export function AssistantPanel({
     });
   }, []);
 
-  function completeOnboardingTour() {
+  const completeOnboardingTour = useCallback(() => {
     setOnboardingTourReady(false);
     void browser.storage.local.set({ [ONBOARDING_TOUR_STORAGE_KEY]: ONBOARDING_TOUR_VERSION });
-  }
+  }, []);
+
+  // The tour dims the whole viewport, so a click on the canvas lands on its
+  // overlay and stops there. Treat any such click outside the assistant panel
+  // as "let me draw": dismiss the tour and drop the canvas welcome in the same
+  // gesture. Clicks on the tooltip itself (Next / Skip) keep working.
+  useEffect(() => {
+    if (!onboardingTourReady || collapsed || panelView !== "chat") return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Element | null;
+      if (!target?.closest(".react-joyride__overlay")) return;
+      if (target.closest(".react-joyride__tooltip")) return;
+      const panel = panelRef.current;
+      if (panel) {
+        const rect = panel.getBoundingClientRect();
+        const insidePanel = event.clientX >= rect.left && event.clientX <= rect.right
+          && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        if (insidePanel) return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      completeOnboardingTour();
+      onWelcomeDismissed?.();
+    }
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
+  }, [onboardingTourReady, collapsed, panelView, panelRef, completeOnboardingTour, onWelcomeDismissed]);
 
   function restartOnboardingTour() {
     setPanelView("chat");
@@ -497,7 +525,7 @@ export function AssistantPanel({
     setSubmissionError(null);
     setInput("");
     if (exampleText === undefined) setAttachments([]);
-    onConversationStarted?.();
+    onWelcomeDismissed?.();
     if (text) {
       await sendMessage({ text, files }, { body: { conversationId } });
     } else {

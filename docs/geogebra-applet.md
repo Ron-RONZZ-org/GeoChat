@@ -50,11 +50,27 @@ surface. `src/renderer-react/src/geogebra/canvas-chrome.ts` owns the preference
 resets the construction. Both the General settings tab and a canvas control edit
 it.
 
+The desktop shell floats its own titlebar over the canvas so the drawing area
+keeps every pixel. GeoGebra's toolbar occupies that same top strip, so in the
+full interface the shell pushes the canvas down by the titlebar height
+(`--geochat-titlebar-height`). Without that reservation the titlebar would sit
+on top of the toolbar and turn every tool click into a window drag. The sparse
+canvas has nothing in that strip and stays edge to edge.
+
+GeoGebra's menu bar opens inside the applet, beneath the floating assistant
+panel. While a menu is open the panel is marked `geochat-panel-host-passthrough`
+so pointer events reach the menu; the marker clears when the menu closes.
+
 The applet runs in the app language: `mountGeoGebra` takes a `language`, which
 the renderer resolves from the persisted app-language setting (default English,
 never the hosted runtime's own default). A language change is forwarded through
 `ggbApplet.setLanguage` on the live applet, so it does not remount or reset the
 construction.
+
+`.appletParameters` is an inline-block with no intrinsic width. The stylesheet
+sizes it (and the scaler and frame) explicitly, because otherwise the frame's
+percentage width resolves against a shrink-to-fit box and collapses the whole
+applet when a GeoGebra view — such as the file chooser — replaces the canvas.
 
 ## Saving Exports
 
