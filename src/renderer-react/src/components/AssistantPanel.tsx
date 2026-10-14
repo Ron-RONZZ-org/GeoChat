@@ -63,6 +63,7 @@ import { ConversationDrawer } from "./ConversationDrawer";
 import { LanguageButton } from "./LanguageButton";
 import { MessageAttachment } from "./MessageAttachment";
 import { AgentToolResult, isAgentDisplayToolPart } from "./AgentToolResult";
+import { ToolApprovalCard } from "./ToolApprovalCard";
 import { AssistantProcess } from "./AssistantProcess";
 import { BlackboardDrawer } from "./BlackboardDrawer";
 import { OnboardingTooltip } from "./OnboardingTooltip";
@@ -235,7 +236,7 @@ export function AssistantPanel({
   const panelWindow = usePanelWindow(panelView);
   const { panelRef, collapsed, setCollapsed, dragging, resizing } = panelWindow;
   const messageScroll = useMessageScroll({ active: !collapsed && panelView === "chat" });
-  const { messages, setMessages, sendMessage, stop, status, error } = useAgentRunChat({
+  const { messages, setMessages, sendMessage, stop, status, error, pendingToolApproval, resolveToolApproval } = useAgentRunChat({
     apiOrigin: API_ORIGIN,
     getAuthToken: () => authSessionRef.current.token,
     getModel: () => panelChatRef.current.model,
@@ -1232,6 +1233,9 @@ export function AssistantPanel({
               )}
             </Box>
           </Box>
+          {pendingToolApproval ? (
+            <ToolApprovalCard request={pendingToolApproval} onResolve={resolveToolApproval} />
+          ) : null}
           <ChatComposer
             value={input}
             attachments={attachments}

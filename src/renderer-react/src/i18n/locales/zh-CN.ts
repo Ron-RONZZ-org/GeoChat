@@ -196,6 +196,15 @@ export const zhCN = {
     failed: "\u5931\u8d25",
     running: "\u8fd0\u884c\u4e2d",
   },
+  toolApproval: {
+    title: "需要确认样式修改",
+    description: "模型想对画布应用以下样式命令。选择要执行的命令，或全部拒绝。",
+    reviewLabel: "待确认的样式命令",
+    autoLabel: "将自动执行",
+    approveSelected: "执行所选",
+    approveAll: "全部执行",
+    rejectAll: "全部拒绝",
+  },
   model: {
     selectCurrent: "选择 AI 模型，当前模型为 {{model}}",
     selectTitle: "选择模型（{{model}}）",

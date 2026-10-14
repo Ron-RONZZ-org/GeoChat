@@ -196,6 +196,15 @@ export const en = {
     failed: "failed",
     running: "running",
   },
+  toolApproval: {
+    title: "Confirm style changes",
+    description: "The model wants to apply these style commands to the canvas. Choose which to run, or reject them all.",
+    reviewLabel: "Style commands to confirm",
+    autoLabel: "Will run automatically",
+    approveSelected: "Run selected",
+    approveAll: "Run all",
+    rejectAll: "Reject all",
+  },
   model: {
     selectCurrent: "Select AI model, current model {{model}}",
     selectTitle: "Select model ({{model}})",
