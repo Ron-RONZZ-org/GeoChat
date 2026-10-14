@@ -3,7 +3,6 @@ name: e2e
 on:
   push:
     branches:
-      - master
       - main
     # Docs-only changes need no E2E run. Deliberately NOT `**/*.md`: the
     # `backend/src/agent/builtin-skills/**/SKILL.md` files are runtime assets,

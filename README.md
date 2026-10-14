@@ -231,11 +231,11 @@ bun run release -- --version 0.5.1
 
 ```sh
 bun run release -- --version 0.5.1 --commit --tag
-git push origin master
+git push origin main
 git push origin v0.5.1
 ```
 
-也可以在确认工作区干净且当前分支为 `master` 后一次完成推送：
+也可以在确认工作区干净且当前分支为 `main` 后一次完成推送：
 
 ```sh
 bun run release -- --version 0.5.1 --commit --tag --push

@@ -42,7 +42,7 @@ if (options.commit || options.tag || options.push) {
 
 if (options.tag || options.push) {
   assertReleaseWorktreeIsSafe();
-  assertOnMaster();
+  assertOnMain();
   assertTagAvailable(tag);
 }
 
@@ -51,7 +51,7 @@ if (options.dryRun) {
   if (!options.skipChecks) runChecks(true);
   if (options.commit) console.log(`Would commit: chore(release): ${tag}`);
   if (options.tag) console.log(`Would create annotated tag: ${tag}`);
-  if (options.push) console.log(`Would push master and ${tag} to origin.`);
+  if (options.push) console.log(`Would push main and ${tag} to origin.`);
   process.exit(0);
 }
 
@@ -77,7 +77,7 @@ if (options.tag) {
 
 if (options.push) {
   const releaseSha = gitOutput(["rev-parse", "HEAD"]);
-  run("git", ["push", "origin", "HEAD:master"]);
+  run("git", ["push", "origin", "HEAD:main"]);
   run("git", ["push", "origin", tag]);
   console.log(`Release trigger pushed: ${tag}`);
   if (options.watch) watchAndVerifyRelease({ releaseSha, tag, version });
@@ -216,9 +216,9 @@ function assertReleaseWorktreeIsSafe() {
   }
 }
 
-function assertOnMaster() {
+function assertOnMain() {
   const branch = gitOutput(["branch", "--show-current"]);
-  if (branch !== "master") fail(`Release tags must be created from master (currently on ${branch || "detached HEAD"}).`);
+  if (branch !== "main") fail(`Release tags must be created from main (currently on ${branch || "detached HEAD"}).`);
 }
 
 function assertTagAvailable(tagName) {
@@ -465,8 +465,8 @@ Prepare and optionally publish a desktop release.
 Options:
   --version, -v X.Y.Z  Target semantic version (leading v is accepted)
   --commit             Create chore(release): vX.Y.Z using only version files
-  --tag                Create annotated tag vX.Y.Z from a clean master worktree
-  --push               Push master and the tag (requires --tag)
+  --tag                Create annotated tag vX.Y.Z from a clean main worktree
+  --push               Push main and the tag (requires --tag)
   --no-watch            Do not wait for Actions or verify release outputs after pushing
   --dry-run            Show actions without changing files, Git, or remotes
   --skip-checks        Skip oss/typecheck/tauri-check/test validation

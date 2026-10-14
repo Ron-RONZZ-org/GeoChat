@@ -6,7 +6,7 @@ name: website
 # move.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'website/**'
       - '.github/workflows/website.yml'
@@ -90,7 +90,7 @@ jobs:
           # fatal.
           output=$(mktemp)
           if bunx --silent wrangler@3.90.0 pages project create "$PROJECT" \
-            --production-branch master >"$output" 2>&1; then
+            --production-branch main >"$output" 2>&1; then
             cat "$output"
           elif grep -qiE 'already exists|already been taken|project exists' "$output"; then
             cat "$output"
@@ -105,7 +105,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # A push to master publishes to the production branch; a pull request
+          # A push to main publishes to the production branch; a pull request
           # publishes to its own branch and gets a preview URL.
           command: >-
             pages deploy website/dist

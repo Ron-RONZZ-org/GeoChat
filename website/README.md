@@ -79,7 +79,7 @@ therefore never disagree about where downloads come from.
 ## Deployment
 
 `.github/workflows/website.yml` builds and pushes to Cloudflare Pages:
-production on push to `master`, a preview deployment for every pull request.
+production on push to `main`, a preview deployment for every pull request.
 Both are path-filtered to `website/**`, so copy changes never trigger a Tauri
 build and Rust changes never redeploy the site.
 

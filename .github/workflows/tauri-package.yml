@@ -2,7 +2,7 @@ name: tauri-package
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     tags: ['v*']
     # The marketing site has its own workflow; changing copy must not spend
     # half an hour of macOS and Windows runner time. Docs-only changes are
@@ -19,7 +19,7 @@ on:
       - 'LICENSE'
       - 'NOTICE'
   pull_request:
-    branches: [master]
+    branches: [main]
     paths-ignore:
       - 'website/**'
       - '.github/workflows/website.yml'
@@ -45,7 +45,7 @@ jobs:
   # Correctness: `tauri build` only runs `tauri:prepare`, which is a Vite
   # build. Vite strips types with esbuild and never typechecks, and nothing in
   # the packaging path runs the test suite — so a dependency bump with breaking
-  # type changes goes green here and breaks on master. That is what happened to
+  # type changes goes green here and breaks on main. That is what happened to
   # ai 7, TypeScript 7 and @ai-sdk/alibaba 2, each merged and then reverted.
   #
   # Cost: a type error now fails in about a minute on a Linux runner instead of
