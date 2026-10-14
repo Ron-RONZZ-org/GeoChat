@@ -28,6 +28,7 @@ use commands::app_bundle_update::{
     check_app_bundle_update, get_app_bundle_update_state, install_app_bundle_update,
     rollback_app_bundle_update,
 };
+use commands::export::save_export_file;
 use commands::improvement::{
     get_improvement_plan_preferences, set_improvement_plan_preferences,
     upload_improvement_plan_samples,
@@ -108,6 +109,7 @@ fn main() {
     let app = tauri::Builder::default()
         .register_uri_scheme_protocol(APP_BUNDLE_PROTOCOL, handle_app_bundle_protocol_request)
         .plugin(logging::plugin())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .on_page_load(|webview, payload| {
@@ -153,6 +155,7 @@ fn main() {
             load_problem_bank_page,
             load_problem_detail,
             mark_renderer_ready,
+            save_export_file,
             install_update
         ])
         .build(tauri::generate_context!())

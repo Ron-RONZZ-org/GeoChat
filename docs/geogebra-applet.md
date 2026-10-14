@@ -49,3 +49,13 @@ surface. `src/renderer-react/src/geogebra/canvas-chrome.ts` owns the preference
 `showToolBar` / `showMenuBar` toggles, so switching never remounts the applet or
 resets the construction. Both the General settings tab and a canvas control edit
 it.
+
+## Saving Exports
+
+GeoGebra hands finished exports to `window.ggbExportFile(url, name)` when the
+host defines it, otherwise it triggers a plain download. A download has no
+destination in the Tauri shell (WebKitGTK has no download handler), so
+`src/renderer-react/src/geogebra/export-file.ts` installs the hook only inside
+the desktop shell: it reads the export URL back as bytes and calls the
+`save_export_file` command, which shows a native save dialog. The web build
+leaves the hook undefined and keeps GeoGebra's default download.

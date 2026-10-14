@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { getCanvasChromeMode } from "./geogebra/canvas-chrome";
 import { GeoGebraController } from "./geogebra/controller";
+import { installGeoGebraExportHandler } from "./geogebra/export-file";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { useCanvasChrome } from "./hooks/useCanvasChrome";
@@ -29,6 +30,9 @@ export default function App() {
   const runtimeError = desktopRuntimeError();
 
   useEffect(() => {
+    // Let GeoGebra's export commands reach a native save dialog before the
+    // applet mounts, so the very first export from the menu already has one.
+    installGeoGebraExportHandler();
     let disposed = false;
     // Abort an in-flight mount during HMR or teardown so a stale applet can
     // never replace the current one on the shared host.

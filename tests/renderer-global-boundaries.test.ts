@@ -42,6 +42,10 @@ const allowedBoundaryFiles = {
     maxLines: 80,
     reason: "executes MCP-queued actions against renderer surfaces"
   },
+  "src/renderer-react/src/geogebra/export-file.ts": {
+    maxLines: 80,
+    reason: "routes GeoGebra's export hook to the shell's native save command"
+  },
   "src/renderer-react/src/features/desktop/WindowTitleBar.tsx": {
     maxLines: 90,
     reason: "the window drag region is the only surface that drives Tauri window controls"
