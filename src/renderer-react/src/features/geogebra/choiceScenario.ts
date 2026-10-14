@@ -1,5 +1,5 @@
 import {
-  findForbiddenTwoDimensionalStyleCommands,
+  findTwoDimensionalStyleCommands,
   twoDimensionalStylePolicyMessage
 } from "@geochat-ai/app/geogebra-style-policy";
 import type { Locale } from "../../../../shared/desktop/locale";
@@ -58,7 +58,7 @@ export async function previewChoiceScenario(
   // The same style policy the agent is held to. These commands came from the
   // model, so they are checked here too rather than trusted for having
   // arrived inside a card.
-  const violations = findForbiddenTwoDimensionalStyleCommands({ commands });
+  const violations = findTwoDimensionalStyleCommands({ commands });
   if (violations.length) {
     return { ok: false, error: twoDimensionalStylePolicyMessage(violations, locale) };
   }

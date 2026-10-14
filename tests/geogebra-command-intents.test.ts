@@ -4,7 +4,8 @@ import { buildCommandReferencePacketForRun } from "../backend/src/agent/command-
 const emptySelection = {
   status: "not_needed",
   curriculumNodes: [],
-  selectedSkills: [],
+  domainSkills: [],
+  craftSkills: [],
   enabledAdvancedTools: []
 } as const;
 

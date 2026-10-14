@@ -5,10 +5,10 @@ export type GeoGebraStylePolicyViolation = {
   commandName: string;
 };
 
-export type GeoGebraViewportPolicyViolation = {
+export type GeoGebraUnsupportedCommandViolation = {
   command: string;
   commandName: string;
-  reason: "non_uniform_zoom_bounds" | "non_unit_axis_ratio";
+  replacement: string;
 };
 
 export type GeoGebraFixedAxisPolicyViolation = {
@@ -34,16 +34,16 @@ const twoDimensionalStyleCommandNames = new Set([
   "SetColor",
   "SetDynamicColor",
   "SetFilling",
-  "SetFontSize",
-  "SetFontStyle",
-  "SetLabelMode",
   "SetLineStyle",
   "SetLineThickness",
-  "SetOpacity",
   "SetPointSize",
-  "SetPointStyle",
-  "SetTextStyle"
+  "SetPointStyle"
 ]);
+
+// Label/text commands (SetLabelMode, SetFontSize, SetFontStyle, SetTextStyle)
+// are intentionally absent: label clarity is always permitted. Unsupported
+// commands (SetOpacity, HideLabel, Maximum) are also absent here because they
+// are rejected with feedback, not treated as approvable style edits.
 
 const localizedStyleCommandAliases: Record<string, string> = {
   设置颜色: "SetColor",
@@ -53,10 +53,13 @@ const localizedStyleCommandAliases: Record<string, string> = {
   设置点径: "SetPointSize",
   设置点样式: "SetPointStyle",
   设置线宽: "SetLineThickness",
-  设置线型: "SetLineStyle",
-  设置字体大小: "SetFontSize",
-  设置字体样式: "SetFontStyle",
-  设置文本样式: "SetTextStyle"
+  设置线型: "SetLineStyle"
+};
+
+const unsupportedCommandReplacements: Record<string, string> = {
+  SetOpacity: "SetFilling",
+  HideLabel: "ShowLabel(object, false)",
+  Maximum: "Extremum"
 };
 
 const styleCommandNameByLowerCase = new Map(
@@ -91,7 +94,7 @@ export function hasSemanticTwoDimensionalHighlightIntent(prompt?: string | null)
   return /(?:突出显示|突出|强调|可行域|目标函数|最优|截面|截线|截得|事件|样本空间|和为|满足条件|区域|阴影|边界|关键线段|辅助线|投影|等距|对应关系|单位圆|三角函数|sin|cos|highlight|emphasize|shade|projection|unit\s+circle|trigonometric|feasible\s+region|sample\s+space|event|section|cross[-\s]?section|boundary|target\s+function|objective\s+function)/iu.test(text);
 }
 
-export function findForbiddenTwoDimensionalStyleCommands(
+export function findTwoDimensionalStyleCommands(
   args: unknown,
   options: { userPrompt?: string | null } = {}
 ): GeoGebraStylePolicyViolation[] {
@@ -123,60 +126,28 @@ export function twoDimensionalStylePolicyMessage(
   return `2D GeoGebra 绘图默认必须保持 GeoGebra 视觉样式，除非用户明确要求编辑外观，或题目需要对区域、事件、截面、关键线段、比较目标做语义高亮。2D 语义高亮只允许使用颜色和轻量填充，不要修改线段粗细、线型、点大小、字体、背景或无关对象样式。违规命令：${names}。`;
 }
 
-export function findForbiddenViewportScaleCommands(args: unknown): GeoGebraViewportPolicyViolation[] {
+export function findUnsupportedGeoGebraCommands(args: unknown): GeoGebraUnsupportedCommandViolation[] {
   if (!isExecuteGeoGebraCommandsArgsLike(args)) return [];
   return args.commands
     .map((command) => {
-      const parsed = parseGeoGebraCommandCall(command);
-      if (!parsed) return undefined;
-      const commandName = parsed.commandName.toLowerCase();
-      if (commandName === "zoomin") {
-        const numbers = parseNumericArgs(parsed.argsText);
-        if (numbers.length === 4) {
-          const width = Math.abs(numbers[2] - numbers[0]);
-          const height = Math.abs(numbers[3] - numbers[1]);
-          if (!nearlyEqual(width, height)) {
-            return { command, commandName: "ZoomIn", reason: "non_uniform_zoom_bounds" as const };
-          }
-        }
-      }
-      if (commandName === "setaxesratio") {
-        const numbers = parseNumericArgs(parsed.argsText);
-        if (numbers.length >= 2 && numbers.some((value) => !nearlyEqual(value, 1))) {
-          return { command, commandName: "SetAxesRatio", reason: "non_unit_axis_ratio" as const };
-        }
-      }
-      return undefined;
+      const commandName = geoGebraCommandName(command);
+      if (!commandName) return undefined;
+      const normalizedName = localizedStyleCommandAliases[commandName] ?? commandName;
+      const replacement = unsupportedCommandReplacements[normalizedName];
+      return replacement ? { command, commandName: normalizedName, replacement } : undefined;
     })
-    .filter((item): item is GeoGebraViewportPolicyViolation => Boolean(item));
+    .filter((item): item is GeoGebraUnsupportedCommandViolation => Boolean(item));
 }
 
-export function repairViewportScaleCommand(command: string): string | undefined {
-  const parsed = parseGeoGebraCommandCall(command);
-  if (!parsed) return undefined;
-  const commandName = parsed.commandName.toLowerCase();
-  const numbers = parseNumericArgs(parsed.argsText);
-  if (commandName === "zoomin" && numbers.length === 4) {
-    const [minX, minY, maxX, maxY] = numbers;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const halfRange = Math.max(Math.abs(maxX - minX), Math.abs(maxY - minY)) / 2;
-    return `ZoomIn(${formatPolicyNumber(centerX - halfRange)}, ${formatPolicyNumber(centerY - halfRange)}, ${formatPolicyNumber(centerX + halfRange)}, ${formatPolicyNumber(centerY + halfRange)})`;
-  }
-  if (commandName === "setaxesratio" && numbers.length >= 3) return "SetAxesRatio(1, 1, 1)";
-  if (commandName === "setaxesratio" && numbers.length >= 2) return "SetAxesRatio(1, 1)";
-  return undefined;
-}
-
-export function viewportScalePolicyMessage(
-  violations: readonly GeoGebraViewportPolicyViolation[],
+export function unsupportedGeoGebraCommandPolicyMessage(
+  violations: readonly GeoGebraUnsupportedCommandViolation[],
   locale?: "zh-CN" | "en-US" | null
 ) {
-  const names = [...new Set(violations.map((violation) => violation.commandName))].join(", ");
+  const details = [...new Set(violations.map((violation) => `${violation.commandName} -> ${violation.replacement}`))].join(", ");
   if (locale === "en-US") {
-    return `GeoGebra viewport changes must preserve 1:1 axis scale unless the user explicitly asks for distorted axes. Use uniform zoom or SetAxesRatio(1, 1) / SetAxesRatio(1, 1, 1). Forbidden commands: ${names}.`;
+    return `These GeoGebra 5 commands are unsupported; use the replacement: ${details}.`;
   }
-  return `GeoGebra 视野调整必须保持 x/y/z 轴 1:1 比例，除非用户明确要求拉伸坐标轴。请使用等比缩放，或使用 SetAxesRatio(1, 1) / SetAxesRatio(1, 1, 1)。违规命令：${names}。`;
+  return `这些 GeoGebra 5 命令不支持，请改用替代命令：${details}。`;
 }
 
 export function findForbiddenFixedAxisObjectCommands(args: unknown): GeoGebraFixedAxisPolicyViolation[] {
@@ -266,17 +237,6 @@ function geoGebraCommandName(command: string) {
   return match?.[1] ?? null;
 }
 
-function parseGeoGebraCommandCall(command: string) {
-  const match = command.match(/^\s*(?:[\p{L}_][\p{L}\p{N}_]*\s*=\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\((.*)\)\s*;?\s*$/u);
-  return match ? { commandName: match[1], argsText: match[2] } : null;
-}
-
-function parseNumericArgs(argsText: string) {
-  const parts = argsText.split(",").map((part) => part.trim());
-  const numbers = parts.map((part) => Number(part));
-  return numbers.every((value) => Number.isFinite(value)) ? numbers : [];
-}
-
 function stripGeoGebraStrings(command: string) {
   return command.replace(/"[^"]*"|'[^']*'/g, "");
 }
@@ -288,12 +248,4 @@ function assignsGeoGebraIdentifier(command: string, name: string) {
 
 function hasDynamicTextExpression(command: string) {
   return /\bText\s*\(.*\+\s*(?:x|y)\s*\(/iu.test(command);
-}
-
-function nearlyEqual(left: number, right: number) {
-  return Math.abs(left - right) < 1e-9;
-}
-
-function formatPolicyNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(6).replace(/0+$/u, "").replace(/\.$/u, "");
 }

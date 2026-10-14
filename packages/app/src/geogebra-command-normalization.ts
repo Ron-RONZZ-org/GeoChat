@@ -57,15 +57,9 @@ export function normalizeGeoGebraCommandSyntax(command: string): string[] {
   const call = parseGeoGebraCommandCall(aliasedCommand);
   if (!call) return [aliasedCommand];
 
-  if (call.commandName === "SetOpacity") {
-    return [`${call.prefix}SetFilling(${call.args.join(", ")})${call.trailing}`];
-  }
-  if (call.commandName === "HideLabel" && call.args.length >= 1) {
-    return [`${call.prefix}ShowLabel(${call.args[0]}, false)${call.trailing}`];
-  }
-  if (call.commandName === "Maximum") {
-    return [`${call.prefix}Extremum(${call.args.join(", ")})${call.trailing}`];
-  }
+  // Unsupported commands (SetOpacity, HideLabel, Maximum) are intentionally not
+  // rewritten here: they are rejected with feedback at the tool boundary so the
+  // model learns the correct command, and no output is silently mutated.
   if (call.commandName === "SetColor") {
     return normalizeSetColorCommand(call);
   }
