@@ -101,6 +101,8 @@ export async function mountGeoGebra(options: {
   signal?: AbortSignal;
   /** Which GeoGebra chrome to start with. Defaults to the full interface. */
   chrome?: CanvasChromeMode;
+  /** GeoGebra UI language. Defaults to English, not the hosted runtime default. */
+  language?: string;
   onReady: (api: GeoGebraApi) => void;
 }) {
   const mountToken = Symbol("geogebra-mount");
@@ -267,7 +269,7 @@ export async function mountGeoGebra(options: {
     enableLabelDrags: true,
     enableShiftDragZoom: true,
     enableRightClick: true,
-    language: "zh-CN",
+    language: options.language ?? "en",
     borderColor: "#dfe7e2",
     appletOnLoad: (api: GeoGebraApi) => {
       if (disposed || !isActiveMount() || options.signal?.aborted) return;

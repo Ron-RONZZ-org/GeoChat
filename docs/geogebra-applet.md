@@ -50,6 +50,12 @@ surface. `src/renderer-react/src/geogebra/canvas-chrome.ts` owns the preference
 resets the construction. Both the General settings tab and a canvas control edit
 it.
 
+The applet runs in the app language: `mountGeoGebra` takes a `language`, which
+the renderer resolves from the persisted app-language setting (default English,
+never the hosted runtime's own default). A language change is forwarded through
+`ggbApplet.setLanguage` on the live applet, so it does not remount or reset the
+construction.
+
 ## Saving Exports
 
 GeoGebra hands finished exports to `window.ggbExportFile(url, name)` when the

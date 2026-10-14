@@ -11,15 +11,17 @@ import { installGeoGebraExportHandler } from "./geogebra/export-file";
 import { mountGeoGebra } from "./geogebra/ggbdeploy-wrapper";
 import { setFrontendGeoGebraController } from "./geogebra/runtime";
 import { useCanvasChrome } from "./hooks/useCanvasChrome";
+import { currentAppLanguage, resolveAppLanguage } from "./i18n";
 import { WindowTitleBar } from "./features/desktop/WindowTitleBar";
 import { backendOrigin, desktopRuntimeError } from "./features/desktop/runtime";
 import { desktopLogger } from "./features/desktop/desktopLogger";
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef(new GeoGebraController());
   const { mode: canvasChrome, toggle: toggleCanvasChrome } = useCanvasChrome();
+  const appLanguage = resolveAppLanguage(i18n.language);
   const [canvasState, setCanvasState] = useState<"loading" | "ready" | "error">("loading");
   const [canvasError, setCanvasError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -45,6 +47,9 @@ export default function App() {
       backendBaseUrl: backendOrigin(),
       signal: mountAbort.signal,
       chrome: getCanvasChromeMode(),
+      // Read the live i18n language rather than a render closure so the applet
+      // always starts in the language the app is actually showing.
+      language: currentAppLanguage(),
       onReady: (api) => {
         if (disposed) return;
         controllerRef.current.setApi(api);
@@ -74,6 +79,13 @@ export default function App() {
     if (canvasState !== "ready") return;
     controllerRef.current.setCanvasChrome(canvasChrome);
   }, [canvasChrome, canvasState]);
+
+  // Follow the app language in GeoGebra's own UI. Like the chrome switch, this
+  // happens on the live applet so changing the language keeps the construction.
+  useEffect(() => {
+    if (canvasState !== "ready") return;
+    controllerRef.current.setLanguage(appLanguage);
+  }, [appLanguage, canvasState]);
 
   async function resetCanvas() {
     if (canvasState !== "ready" || resetting) return;

@@ -11,6 +11,11 @@ export function resolveAppLanguage(value: unknown): AppLanguage {
   return typeof value === "string" && value.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
 }
 
+/** The language i18next is currently using, normalized to a supported code. */
+export function currentAppLanguage(): AppLanguage {
+  return resolveAppLanguage(i18n.language);
+}
+
 export async function initializeI18n(_apiOrigin?: string) {
   if (i18n.isInitialized) return i18n;
 

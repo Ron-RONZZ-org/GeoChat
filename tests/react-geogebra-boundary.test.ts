@@ -218,3 +218,18 @@ describe("canvas chrome", () => {
     setCanvasChromeMode(previous);
   });
 });
+
+describe("canvas language", () => {
+  test("forwards the app language to the live applet", () => {
+    const calls: Array<[string, unknown]> = [];
+    const controller = new GeoGebraController();
+    controller.setApi(api({ setLanguage: (value: unknown) => { calls.push(["setLanguage", value]); } }));
+    controller.setLanguage("zh-CN");
+    expect(calls).toEqual([["setLanguage", "zh-CN"]]);
+  });
+
+  test("is inert before the applet is mounted", () => {
+    const controller = new GeoGebraController();
+    expect(() => controller.setLanguage("en")).not.toThrow();
+  });
+});

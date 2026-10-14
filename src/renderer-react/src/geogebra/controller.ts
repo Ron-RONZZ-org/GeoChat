@@ -67,6 +67,12 @@ export class GeoGebraController {
     return true;
   }
 
+  /** Switch the applet's own UI language, without a remount or a lost construction. */
+  setLanguage(language: string) {
+    if (!this.api || typeof this.api.setLanguage !== "function") return;
+    this.call("setLanguage", language);
+  }
+
   /** Show or hide GeoGebra's own chrome on the live applet, without a remount. */
   setCanvasChrome(mode: CanvasChromeMode) {
     if (!this.api) return;
